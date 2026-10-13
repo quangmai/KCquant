@@ -111,6 +111,24 @@ def evaluate_monitor(z_price: float, h_price: float, cert_df: pd.DataFrame,
         status_msg = "⏳ POSITION ACTIVE / HOLD. Spread is between take-profit (+2.00¢) and stop-loss (+10.50¢)."
         exit_code = 0
 
+    # Pass rate calculations
+    total_graded_today = passed_today + failed_today
+    pass_rate_today = (passed_today / total_graded_today * 100.0) if total_graded_today > 0 else None
+
+    p_roll = cert_df["passed"].tail(7).sum()
+    f_roll = cert_df["failed"].tail(7).sum()
+    tot_roll = p_roll + f_roll
+    pass_rate_7d = (p_roll / tot_roll * 100.0) if tot_roll > 0 else 0.0
+
+    if len(cert_df) >= 14:
+        p_prior = cert_df["passed"].iloc[-14:-7].sum()
+        f_prior = cert_df["failed"].iloc[-14:-7].sum()
+        tot_prior = p_prior + f_prior
+        pass_rate_prior_7d = (p_prior / tot_prior * 100.0) if tot_prior > 0 else pass_rate_7d
+        delta_pass_rate_7d = pass_rate_7d - pass_rate_prior_7d
+    else:
+        delta_pass_rate_7d = 0.0
+
     return {
         "timestamp": datetime.now().isoformat(),
         "as_of_report_date": latest_cert_date.strftime("%Y-%m-%d"),
@@ -136,6 +154,9 @@ def evaluate_monitor(z_price: float, h_price: float, cert_df: pd.DataFrame,
         "pending_delta_bags": int(delta_pending),
         "passed_today_bags": int(passed_today),
         "failed_today_bags": int(failed_today),
+        "pass_rate_7d": round(pass_rate_7d, 1),
+        "pass_rate_7d_delta": round(delta_pass_rate_7d, 1),
+        "pass_rate_today": round(pass_rate_today, 1) if pass_rate_today is not None else None,
         "total_pipeline_bags": int(latest_cert + latest_pending)
     }
 
@@ -174,6 +195,7 @@ def print_dashboard(data: dict):
     print(f"     • Certified Warehouse:   {data['certified_stocks_bags']:,} bags ({data['certified_stock_delta_bags']:+,} bags today)")
     print(f"     • Pending for Grading:   {data['pending_grading_bags']:,} bags ({data['pending_delta_bags']:+,} bags today)")
     print(f"     • Graded Today:          {data['passed_today_bags']:,} passed / {data['failed_today_bags']:,} failed")
+    print(f"     • Grading Pass Rate (7d):{data['pass_rate_7d']:.1f}% ({data['pass_rate_7d_delta']:+.1f}% vs prior week)")
     print(f"     • Total Pipeline:        {data['total_pipeline_bags']:,} bags (Certified + Pending)")
 
     print("\n" + "-" * 76)

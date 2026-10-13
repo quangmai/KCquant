@@ -57,6 +57,8 @@ def test_format_telegram_html():
         "pending_delta_bags": -2436,
         "passed_today_bags": 0,
         "failed_today_bags": 3036,
+        "pass_rate_7d": 54.0,
+        "pass_rate_7d_delta": -13.2,
         "total_pipeline_bags": 264537,
         "as_of_report_date": "2026-10-09"
     }
@@ -67,6 +69,7 @@ def test_format_telegram_html():
     assert "KCZ26" in html
     assert "+8.25¢" in html
     assert "252,006 bags" in html
+    assert "Grading Pass Rate (7d): <code>54.0%</code> (<code>-13.2%</code>)" in html
 
     # Take profit trigger
     tp_data = dict(sample_data, action_flag="TAKE_PROFIT_TRIGGERED", spread_zh_cents=1.50, unrealized_pnl_usd=2531.25, unrealized_pnl_cents=6.75)

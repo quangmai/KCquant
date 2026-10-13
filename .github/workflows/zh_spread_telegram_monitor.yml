@@ -2,9 +2,9 @@ name: KC Coffee Z/H Spread Monitor (Telegram Bot)
 
 on:
   schedule:
-    # Run every 30 minutes from 08:00 UTC to 18:30 UTC, Monday through Friday
-    # (Covers 04:00 - 14:30 New York Time; script internally validates 04:15 - 13:30 ET market open)
-    - cron: '*/30 8-18 * * 1-5'
+    # Run at :15 and :45 past each hour from 08:00 to 18:00 UTC, Monday through Friday
+    # (:15 and :45 avoid GitHub Actions server congestion at :00 and :30)
+    - cron: '15,45 8-18 * * 1-5'
   workflow_dispatch:
     inputs:
       force:

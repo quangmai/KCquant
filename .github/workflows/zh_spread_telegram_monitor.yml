@@ -2,9 +2,10 @@ name: KC Coffee Z/H Spread Monitor (Telegram Bot)
 
 on:
   schedule:
-    # Run at :15 and :45 past each hour from 08:00 to 18:00 UTC, Monday through Friday
-    # (:15 and :45 avoid GitHub Actions server congestion at :00 and :30)
-    - cron: '15,45 8-18 * * 1-5'
+    # Run at :15 and :45 past each hour (the python script internally guards active ICE market hours)
+    - cron: '15,45 * * * *'
+  repository_dispatch:
+    types: [zh-monitor]
   workflow_dispatch:
     inputs:
       force:

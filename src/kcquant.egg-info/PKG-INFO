@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: kcquant
+Version: 0.1.0
+Summary: Coffee futures (ICE KC, later RC) research: data, roll engine, curve features
+Requires-Python: >=3.10
+Requires-Dist: pandas>=2.0
+Requires-Dist: numpy>=1.24
+Requires-Dist: matplotlib>=3.7
+Requires-Dist: pyarrow>=12
+Provides-Extra: databento
+Requires-Dist: databento>=0.40; extra == "databento"
+Provides-Extra: dev
+Requires-Dist: pytest>=7; extra == "dev"

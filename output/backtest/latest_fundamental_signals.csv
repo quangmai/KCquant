@@ -1,0 +1,6 @@
+sleeve,as_of_decision,signal,weight
+H1_cot_KC,2026-10-02,0.695,0.169
+H2_cot_RC,2026-10-02,0.876,0.293
+H3_brl_KC,2026-10-02,-1.0,-0.243
+H4_weather_KC,2026-10-02,0.0,0.0
+H5_weather_RC,2026-10-02,0.0,0.0

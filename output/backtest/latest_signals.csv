@@ -1,0 +1,6 @@
+sleeve,as_of_decision,signal,weight,weight_KC,weight_RC,zscore
+carry_KC,2026-10-02,1.0,0.243,,,
+carry_RC,2026-10-02,0.774,0.259,,,
+trend_KC,2026-10-02,0.333,0.081,,,
+trend_RC,2026-10-02,-0.333,-0.111,,,
+spread_KC_RC,2026-10-02,0.053,,0.006,-0.009,-0.17

@@ -1,0 +1,19 @@
+parameter,value,sleeve,sharpe
+carry full_at,0.05,carry_KC,-0.41466601975030826
+carry full_at,0.05,carry_RC,0.4951907400717893
+carry full_at,0.1,carry_KC,-0.4634925245076318
+carry full_at,0.1,carry_RC,0.47364404578673885
+carry full_at,0.2,carry_KC,-0.5312369289041444
+carry full_at,0.2,carry_RC,0.4683528737438409
+trend lookbacks,"(21, 63, 126)",trend_KC,-0.06117449816842854
+trend lookbacks,"(21, 63, 126)",trend_RC,0.40067046974166454
+trend lookbacks,"(63, 126, 252)",trend_KC,0.03210265551445335
+trend lookbacks,"(63, 126, 252)",trend_RC,0.5154993685868337
+trend lookbacks,"(126, 252)",trend_KC,0.04471786891316766
+trend lookbacks,"(126, 252)",trend_RC,0.4348790474148821
+spread window,126,spread_KC_RC,-0.4241632361391535
+spread window,252,spread_KC_RC,-0.5555722591682519
+spread window,504,spread_KC_RC,-0.6232681457545451
+cost ticks/side,1,PORTFOLIO,0.1405175605889824
+cost ticks/side,2,PORTFOLIO,0.06348907192716871
+cost ticks/side,4,PORTFOLIO,-0.09040739839904459

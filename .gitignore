@@ -1,0 +1,24 @@
+# Byte-compiled / cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Environment and sensitive keys
+.env
+.env.*
+
+# OS files
+.DS_Store
+
+# Heavy raw binary data and cache
+data/raw/
+*.dbn.zst
+
+# Runtime monitor logs and temporary outputs
+output/monitor/*.log
+output/*.parquet
+
+# IDE / Editor files
+.vscode/
+.idea/

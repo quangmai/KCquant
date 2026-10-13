@@ -1,0 +1,9 @@
+year,pair,strategy,status,entry_date,entry_spread,exit_date,exit_spread,pnl_pts,net_pnl_usd,naive_pts,naive_net_usd
+2019,KCZ19/KCH20,Filtered,FILTERED_OUT (No Backwardation),2019-10-01,-3.6,-,,0.0,0.0,-0.4,-192.5
+2020,KCZ20/KCH21,Filtered,FILTERED_OUT (No Backwardation),2020-10-01,-2.15,-,,0.0,0.0,0.7,220.0
+2021,KCZ21/KCH22,Filtered,FILTERED_OUT (No Backwardation),2021-10-01,-2.85,-,,0.0,0.0,-0.6,-267.5
+2022,KCZ22/KCH23,Filtered,TAKE_PROFIT,2022-10-03,8.4,2022-10-27,1.9,6.5,2395.0,9.1,3370.0
+2023,KCZ23/KCH24,Filtered,FILTERED_OUT (No Backwardation),2023-10-02,-1.0,-,,0.0,0.0,-6.05,-2311.25
+2024,KCZ24/KCH25,Filtered,FILTERED_OUT (No Backwardation),2024-10-01,2.0,-,,0.0,0.0,1.55,538.75
+2025,KCZ25/KCH26,Filtered,STOP_LOSS,2025-10-01,15.85,2025-10-14,21.85,-6.0,-2292.5,-11.15,-4223.75
+2026,KCZ26/KCH27,Filtered,OPEN,2026-10-01,8.65,2026-10-02,8.25,0.4,150.0,0.4,150.0

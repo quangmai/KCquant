@@ -1,0 +1,58 @@
+name: KC Coffee Z/H Spread Monitor (Telegram Bot)
+
+on:
+  schedule:
+    # Run every 30 minutes from 08:00 UTC to 18:30 UTC, Monday through Friday
+    # (Covers 04:00 - 14:30 New York Time; script internally validates 04:15 - 13:30 ET market open)
+    - cron: '*/30 8-18 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force send update even if market is currently closed'
+        required: false
+        type: boolean
+        default: false
+      settle_only:
+        description: 'Use official daily settles instead of live intraday quote'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: zh-spread-monitor
+  cancel-in-progress: false
+
+jobs:
+  run-monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run Telegram Z/H Monitor
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DATABENTO_API_KEY: ${{ secrets.DATABENTO_API_KEY }}
+        run: |
+          ARGS=""
+          if [ "${{ github.event.inputs.force }}" = "true" ]; then
+            ARGS="$ARGS --force"
+          fi
+          if [ "${{ github.event.inputs.settle_only }}" = "true" ]; then
+            ARGS="$ARGS --settle-only"
+          fi
+          python scripts/telegram_zh_bot.py $ARGS

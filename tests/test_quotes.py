@@ -88,7 +88,8 @@ def test_get_latest_prices_live_fallback(tmp_path):
         "trade_date,KCZ26,KCH27\n2026-10-12,289.90,283.00\n"
     )
 
-    with patch("kcquant.quotes.fetch_live_zh_quotes", return_value=None):
+    with patch("kcquant.quotes.fetch_live_zh_quotes", return_value=None), \
+         patch("kcquant.quotes.sync_databento_settles", return_value=False):
         z, h, src, meta = get_latest_prices(raw_file=raw_csv, prefer_live=True)
         assert z == 289.90
         assert h == 283.00

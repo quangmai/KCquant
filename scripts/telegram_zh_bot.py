@@ -112,6 +112,7 @@ def format_telegram_html(data: dict, is_forced: bool = False) -> str:
         f"📦 <b>Physical Certified Inventory:</b>\n"
         f"• Certified Stocks: <code>{data['certified_stocks_bags']:,} bags</code> ({data['certified_stock_delta_bags']:+,})\n"
         f"• Pending for Grading: <code>{data['pending_grading_bags']:,} bags</code> ({data['pending_delta_bags']:+,})\n"
+        f"• Graded Today: " + (f"<code>{data.get('total_graded_today_bags', data.get('passed_today_bags', 0) + data.get('failed_today_bags', 0)):,} bags</code> (Pass rate: {data.get('pass_rate_today', 0.0):.1f}%)\n" if data.get('total_graded_today_bags', data.get('passed_today_bags', 0) + data.get('failed_today_bags', 0)) > 0 else f"<code>0 bags</code> <i>(Last session {data.get('last_grading_date', 'Oct 09')}: {data.get('last_grading_rate', 0.0):.0f}% pass)</i>\n") +
         f"• Grading Pass Rate (7d): <code>{data.get('pass_rate_7d', 0.0):.1f}%</code> (<code>{data.get('pass_rate_7d_delta', 0.0):+.1f}%</code>)\n"
         f"• Total Pipeline: <code>{data['total_pipeline_bags']:,} bags</code>\n"
         f"• As-of Report: <i>{data['as_of_report_date']}</i>\n"

@@ -137,11 +137,12 @@ def sync_databento_settles(raw_curve_file: Path | None = None) -> bool:
             if not z_sub.empty and not h_sub.empty:
                 z_px = float(z_sub.iloc[-1]["close"])
                 h_px = float(h_sub.iloc[-1]["close"])
-                row = {c: None for c in df_raw.columns}
-                row["trade_date"] = d
-                row["KCZ26"] = z_px
-                row["KCH27"] = h_px
-                new_rows.append(row)
+                if z_px > 0 and h_px > 0:
+                    row = {c: None for c in df_raw.columns}
+                    row["trade_date"] = d
+                    row["KCZ26"] = z_px
+                    row["KCH27"] = h_px
+                    new_rows.append(row)
 
         if new_rows:
             df_updated = pd.concat([df_raw, pd.DataFrame(new_rows)], ignore_index=True)

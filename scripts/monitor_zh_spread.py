@@ -115,6 +115,21 @@ def evaluate_monitor(z_price: float, h_price: float, cert_df: pd.DataFrame,
     total_graded_today = passed_today + failed_today
     pass_rate_today = (passed_today / total_graded_today * 100.0) if total_graded_today > 0 else None
 
+    # Last active grading session
+    active_graded = cert_df[(cert_df["passed"] + cert_df["failed"]) > 0]
+    if len(active_graded) > 0:
+        last_active_row = active_graded.iloc[-1]
+        last_grading_date = active_graded.index[-1].strftime("%b %d")
+        last_grading_p = int(last_active_row["passed"])
+        last_grading_f = int(last_active_row["failed"])
+        last_grading_tot = last_grading_p + last_grading_f
+        last_grading_rate = (last_grading_p / last_grading_tot * 100.0) if last_grading_tot > 0 else 0.0
+    else:
+        last_grading_date = "N/A"
+        last_grading_p = 0
+        last_grading_f = 0
+        last_grading_rate = 0.0
+
     p_roll = cert_df["passed"].tail(7).sum()
     f_roll = cert_df["failed"].tail(7).sum()
     tot_roll = p_roll + f_roll
@@ -154,6 +169,11 @@ def evaluate_monitor(z_price: float, h_price: float, cert_df: pd.DataFrame,
         "pending_delta_bags": int(delta_pending),
         "passed_today_bags": int(passed_today),
         "failed_today_bags": int(failed_today),
+        "total_graded_today_bags": int(total_graded_today),
+        "last_grading_date": last_grading_date,
+        "last_grading_passed": last_grading_p,
+        "last_grading_failed": last_grading_f,
+        "last_grading_rate": round(last_grading_rate, 1),
         "pass_rate_7d": round(pass_rate_7d, 1),
         "pass_rate_7d_delta": round(delta_pass_rate_7d, 1),
         "pass_rate_today": round(pass_rate_today, 1) if pass_rate_today is not None else None,

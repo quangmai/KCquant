@@ -10,6 +10,7 @@ from kcquant.charting import (
     snap_to_5min,
     record_cqg_intraday_snapshot,
     generate_intraday_5m_chart,
+    get_prev_day_range,
 )
 from kcquant.notify import send_telegram_photo
 
@@ -47,6 +48,43 @@ def test_record_cqg_intraday_snapshot(tmp_path):
     assert df["spread_zh"].iloc[0] == 13.40
 
 
+def test_get_prev_day_range_fallback():
+    with patch("requests.get", side_effect=Exception("Network error")):
+        res = get_prev_day_range("KCZ26")
+        assert res is not None
+        assert res["contract"] == "KCZ26"
+        assert res["high"] > 0
+        assert res["low"] > 0
+        assert res["high"] >= res["low"]
+
+
+def test_get_prev_day_range_yahoo():
+    mock_payload = {
+        "chart": {
+            "result": [{
+                "timestamp": [1792468800, 1792555200],  # 2 days
+                "indicators": {
+                    "quote": [{
+                        "high": [318.20, 317.90],
+                        "low": [309.20, 308.35],
+                        "close": [311.30, 316.15]
+                    }]
+                }
+            }]
+        }
+    }
+    with patch("requests.get") as mock_get:
+        mock_resp = MagicMock()
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = mock_payload
+        mock_get.return_value = mock_resp
+
+        res = get_prev_day_range("KCZ26")
+        assert res is not None
+        assert res["high"] == 317.90
+        assert res["low"] == 308.35
+
+
 def test_generate_intraday_5m_chart(tmp_path):
     csv_file = tmp_path / "test_chart_data.csv"
     out_img = tmp_path / "test_chart.png"
@@ -59,7 +97,12 @@ def test_generate_intraday_5m_chart(tmp_path):
     ]
     pd.DataFrame(rows).to_csv(csv_file, index=False)
 
-    img_res = generate_intraday_5m_chart(csv_path=csv_file, output_image=out_img)
+    img_res = generate_intraday_5m_chart(
+        csv_path=csv_file,
+        output_image=out_img,
+        prev_day_high=317.90,
+        prev_day_low=308.35
+    )
     assert img_res is not None
     assert img_res.exists()
     assert img_res.stat().st_size > 1000  # Non-trivial image file generated

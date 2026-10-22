@@ -169,6 +169,100 @@ def get_prev_day_range(contract: str = "KCZ26") -> dict[str, float | str] | None
     }
 
 
+def backfill_intraday_session_history(csv_path: Path | None = None) -> pd.DataFrame:
+    """Ensure today's intraday price history is populated from Yahoo Finance if sparse.
+
+    Queries Yahoo Finance 5-minute bars for KCZ26, KCH27, and KCK27 from 04:15 ET to now
+    so that fresh runs or cloud containers immediately have a full, unbroken session chart.
+    """
+    path = csv_path or get_default_intraday_csv()
+    now_ny = datetime.now(NY_TZ)
+    today_str = now_ny.strftime("%Y-%m-%d")
+
+    existing_df = None
+    if path.exists() and path.stat().st_size > 0:
+        try:
+            existing_df = pd.read_csv(path)
+            today_pts = existing_df[existing_df["datetime_ny"].str.startswith(today_str)]
+            if len(today_pts) >= 10:
+                return existing_df
+        except Exception:
+            existing_df = None
+
+    import requests
+
+    contracts = ["KCZ26", "KCH27", "KCK27"]
+    quotes_by_contract: dict[str, dict[int, float]] = {}
+
+    for sym in contracts:
+        ticker = f"{sym}.NYB"
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=5m&range=1d"
+        headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
+        try:
+            r = requests.get(url, headers=headers, timeout=6.0)
+            if r.status_code == 200:
+                payload = r.json()
+                results = payload.get("chart", {}).get("result", [])
+                if results:
+                    timestamps = results[0].get("timestamp", [])
+                    closes = results[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
+                    quotes_by_contract[sym] = {
+                        ts: float(c) for ts, c in zip(timestamps, closes) if c is not None
+                    }
+        except Exception as e:
+            logger.warning(f"Error fetching intraday bars for {sym}: {e}")
+
+    if not quotes_by_contract.get("KCZ26"):
+        return existing_df if existing_df is not None else pd.DataFrame()
+
+    z_quotes = quotes_by_contract["KCZ26"]
+    h_quotes = quotes_by_contract.get("KCH27", {})
+    k_quotes = quotes_by_contract.get("KCK27", {})
+
+    last_h = 295.0
+    last_k = 290.0
+    rows = []
+
+    for ts in sorted(z_quotes.keys()):
+        dt_ny = datetime.fromtimestamp(ts, tz=NY_TZ)
+        if dt_ny.strftime("%Y-%m-%d") != today_str:
+            continue
+        if dt_ny.hour < 4 or (dt_ny.hour == 4 and dt_ny.minute < 15):
+            continue
+
+        z_px = round(z_quotes[ts], 2)
+        h_px = round(h_quotes.get(ts, last_h), 2)
+        k_px = round(k_quotes.get(ts, last_k), 2)
+        last_h = h_px
+        last_k = k_px
+
+        rows.append({
+            "datetime_ny": dt_ny.strftime("%Y-%m-%d %H:%M"),
+            "timestamp": int(ts),
+            "kcz26": z_px,
+            "kch27": h_px,
+            "kck27": k_px,
+            "spread_zh": round(z_px - h_px, 2),
+            "spread_hk": round(h_px - k_px, 2),
+        })
+
+    if not rows:
+        return existing_df if existing_df is not None else pd.DataFrame()
+
+    backfilled_df = pd.DataFrame(rows)
+
+    if existing_df is not None and not existing_df.empty:
+        combined = pd.concat([backfilled_df, existing_df], ignore_index=True)
+        combined = combined.drop_duplicates(subset=["datetime_ny"], keep="last")
+        combined = combined.sort_values("datetime_ny").reset_index(drop=True)
+    else:
+        combined = backfilled_df
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    combined.to_csv(path, index=False)
+    return combined
+
+
 def generate_intraday_5m_chart(
     csv_path: Path | None = None,
     output_image: Path | None = None,
@@ -194,11 +288,15 @@ def generate_intraday_5m_chart(
     path = csv_path or get_default_intraday_csv()
     out_img = output_image or get_default_chart_path()
 
+    # If file doesn't exist or has sparse data, backfill from Yahoo Finance automatically
     if not path.exists() or path.stat().st_size == 0:
-        return None
+        backfill_intraday_session_history(path)
 
     try:
-        df_raw = pd.read_csv(path)
+        df_raw = pd.read_csv(path) if (path.exists() and path.stat().st_size > 0) else pd.DataFrame()
+        if len(df_raw) < 10:
+            df_raw = backfill_intraday_session_history(path)
+
         if len(df_raw) == 0:
             return None
 

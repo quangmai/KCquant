@@ -18,11 +18,16 @@ data/raw/
 
 # Runtime monitor logs and temporary outputs
 output/monitor/*.log
-output/monitor/*.json
-output/monitor/*.jsonl
-output/monitor/*.csv
 output/monitor/*.png
 output/*.parquet
+
+# Track persistent monitor history & order logs
+!output/monitor/kc_cqg_intraday_5m.csv
+!output/monitor/kc_market_history.csv
+!output/monitor/kc_telegram_log.jsonl
+!output/monitor/zh_spread_history.csv
+!output/orders/*
+
 
 # IDE / Editor files
 .vscode/

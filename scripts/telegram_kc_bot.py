@@ -365,8 +365,9 @@ def main():
             print(f"❌ Failed to send position snapshot: {res}")
         sys.exit(0)
 
-    if args.listen:
-        print("[*] Starting dedicated interactive Telegram order listener...")
+    if args.daemon or args.listen:
+        mode_str = "daemon" if args.daemon else "interactive listener"
+        print(f"[*] Starting persistent KC market Telegram bot {mode_str} (Interval: {args.interval}s)...")
         print("[*] Pre-warming CQG Desktop live session for instant sub-second execution...")
         try:
             from kcquant.cqg import get_warm_cqg_driver
@@ -374,28 +375,26 @@ def main():
             print("[*] CQG Desktop live session ready! Sub-second execution enabled.")
         except Exception as e:
             print(f"[!] Notice: CQG pre-warm skipped ({e}). Will use fallback.")
-        print("    Waiting for quick order button taps from Telegram (Press Ctrl+C to stop)...")
-        offset = 0
-        while True:
-            try:
-                offset = process_telegram_callbacks(offset)
-                time.sleep(1.5)
-            except KeyboardInterrupt:
-                print("\n[*] Listener stopped.")
-                break
-            except Exception as e:
-                print(f"[!] Listener error: {e}")
-                time.sleep(3)
-        sys.exit(0)
+        print(f"    Listening for interactive order taps & sending market updates every {args.interval // 60}m. Press Ctrl+C to stop.")
 
-    if args.daemon:
-        print(f"[*] Starting persistent KC market Telegram bot daemon (Check interval: {args.interval}s)...")
-        print("    Listening for interactive quick order taps. Press Ctrl+C to stop.")
+        # Read last report timestamp from log file so we resume cleanly
         last_report_ts = 0.0
+        log_file = ROOT / "output" / "monitor" / "kc_telegram_log.jsonl"
+        if log_file.exists():
+            try:
+                with open(log_file) as f:
+                    lines = [line.strip() for line in f if line.strip()]
+                    if lines:
+                        last_entry = json.loads(lines[-1])
+                        if "timestamp" in last_entry:
+                            last_report_ts = datetime.fromisoformat(last_entry["timestamp"]).timestamp()
+            except Exception:
+                pass
+
         offset = 0
         while True:
             try:
-                # 1. Listen for interactive Telegram button taps with low latency
+                # 1. Listen for interactive Telegram button taps and text commands
                 offset = process_telegram_callbacks(offset)
 
                 # 2. Check if it's time for the 15-minute scheduled report
@@ -404,7 +403,7 @@ def main():
                     now_ny = datetime.now(NY_TZ)
                     is_open, reason = is_market_open(now_ny)
                     if is_open or args.force:
-                        print(f"[{now_ny:%H:%M:%S ET}] Market is open. Running 15-min update...")
+                        print(f"[{now_ny:%H:%M:%S ET}] Market is open. Running {args.interval // 60}-min update...")
                         ok, res = run_telegram_update(
                             force=args.force, z_price=args.z_price,
                             h_price=args.h_price, k_price=args.k_price,
@@ -418,13 +417,13 @@ def main():
                         print(f"[{now_ny:%H:%M:%S ET}] {reason}. Waiting...")
                     last_report_ts = cur_time
 
-                time.sleep(2.0)
+                time.sleep(1.5)
             except KeyboardInterrupt:
                 print("\n[*] Stopping Telegram bot daemon.")
                 break
             except Exception as e:
-                print(f"[!] Error in loop: {e}. Retrying in 10s...")
-                time.sleep(10)
+                print(f"[!] Error in loop: {e}. Retrying in 5s...")
+                time.sleep(5)
         sys.exit(0)
 
     # Single-run execution: drain callbacks then send report

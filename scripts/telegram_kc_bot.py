@@ -23,11 +23,26 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import signal
 import sys
 import time
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
+
+_RUNNING = True
+
+def _handle_exit_signal(signum, frame):
+    global _RUNNING
+    print(f"\n[*] Received exit signal ({signum}). Stopping gracefully...")
+    _RUNNING = False
+
+try:
+    signal.signal(signal.SIGTERM, _handle_exit_signal)
+    signal.signal(signal.SIGINT, _handle_exit_signal)
+except Exception:
+    pass
+
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -392,7 +407,7 @@ def main():
                 pass
 
         offset = 0
-        while True:
+        while _RUNNING:
             try:
                 # 1. Listen for interactive Telegram button taps and text commands
                 offset = process_telegram_callbacks(offset)
@@ -424,6 +439,14 @@ def main():
             except Exception as e:
                 print(f"[!] Error in loop: {e}. Retrying in 5s...")
                 time.sleep(5)
+
+        print("[*] Telegram bot daemon exited cleanly.")
+        try:
+            from kcquant.cqg import _SHARED_DRIVER
+            if _SHARED_DRIVER is not None:
+                _SHARED_DRIVER.quit()
+        except Exception:
+            pass
         sys.exit(0)
 
     # Single-run execution: drain callbacks then send report

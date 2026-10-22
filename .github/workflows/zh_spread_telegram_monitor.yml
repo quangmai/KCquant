@@ -65,10 +65,11 @@ jobs:
           fi
           python scripts/telegram_kc_bot.py $ARGS
 
-      - name: Commit Updated 15-Minute Monitor History
+      - name: Commit Updated 15-Minute Monitor History and Positions
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add output/monitor/
-          git commit -m "Auto-update 15m monitor history [skip ci]" || echo "No new history to commit"
+          git add -f output/monitor/ output/orders/
+          git commit -m "Auto-update 15m monitor history and positions [skip ci]" || echo "No new history to commit"
+          git pull --rebase origin main || true
           git push origin main || echo "Push skipped"

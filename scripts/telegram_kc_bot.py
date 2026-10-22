@@ -231,14 +231,14 @@ def process_telegram_callbacks(offset: int | None = None) -> int:
                         show_alert=False
                     )
 
-                    # Execute paper trade
+                    # Execute paper trade (queries real-time CQG price at this exact split second)
                     order_record, positions = place_paper_order(
                         side=side,
                         contract=contract,
                         order_type="MARKET" if ord_type == "MKT" else "LIMIT",
                         qty=1,
                         target_price=price,
-                        live_price=price
+                        live_price=price if ord_type == "LMT" else None
                     )
 
                     # Send confirmation receipt to Telegram

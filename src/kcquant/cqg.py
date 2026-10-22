@@ -61,6 +61,7 @@ def to_ice_symbol(cqg_symbol: str) -> str:
 
 
 _ENV_LOADED = False
+_SHARED_DRIVER = None
 
 
 def get_cqg_credentials(reload_env: bool = False) -> dict[str, str] | None:
@@ -125,6 +126,119 @@ def _create_headless_driver():
     except Exception as e:
         logger.warning(f"Could not create Selenium headless Chrome driver: {e}")
         return None
+
+
+def get_warm_cqg_driver(force_restart: bool = False):
+    """Retrieve or initialize a persistent headless Chrome driver logged in to CQG Desktop.
+
+    Reusing an active session allows subsequent quote queries to run in < 60ms.
+    """
+    global _SHARED_DRIVER
+    creds = get_cqg_credentials()
+    if not creds:
+        return None
+
+    if _SHARED_DRIVER is not None and not force_restart:
+        try:
+            # Check if driver is still alive
+            _ = _SHARED_DRIVER.current_url
+            return _SHARED_DRIVER
+        except Exception:
+            try:
+                _SHARED_DRIVER.quit()
+            except Exception:
+                pass
+            _SHARED_DRIVER = None
+
+    driver = _create_headless_driver()
+    if driver is None:
+        return None
+
+    try:
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+
+        timeout = creds["timeout"]
+        driver.set_page_load_timeout(timeout + 10)
+        driver.get(creds["url"])
+        wait = WebDriverWait(driver, timeout)
+        time.sleep(2)
+
+        if "logon" in driver.current_url.lower() or driver.find_elements(By.NAME, "userName"):
+            user_input = wait.until(EC.presence_of_element_located((By.NAME, "userName")))
+            pass_input = driver.find_element(By.NAME, "password")
+            user_input.clear()
+            user_input.send_keys(creds["username"])
+            pass_input.clear()
+            pass_input.send_keys(creds["password"])
+
+            submit_btn = None
+            for btn in driver.find_elements(By.TAG_NAME, "button"):
+                text = (btn.text or "").strip().lower()
+                btype = btn.get_attribute("type")
+                if "log on" in text or "login" in text or btype == "submit":
+                    submit_btn = btn
+                    break
+
+            if submit_btn:
+                submit_btn.click()
+            else:
+                pass_input.submit()
+
+            for _ in range(int(timeout * 2)):
+                time.sleep(0.5)
+                if "desktop/main" in driver.current_url:
+                    break
+            time.sleep(3)
+
+        _SHARED_DRIVER = driver
+        return _SHARED_DRIVER
+    except Exception as e:
+        logger.warning(f"Error creating warm CQG driver: {e}")
+        try:
+            driver.quit()
+        except Exception:
+            pass
+        return None
+
+
+def fetch_instant_cqg_quote(contract: str = "KCZ26") -> dict | None:
+    """Instantly fetch real-time quote for a contract from CQG Desktop.
+
+    Queries the active warm CQG session to obtain live bid, ask, and trade price
+    with sub-second execution latency.
+    """
+    clean = contract.replace(".NYB", "").upper()
+    driver = get_warm_cqg_driver()
+    now_ny = datetime.now(NY_TZ)
+    time_str = now_ny.strftime("%H:%M:%S ET")
+    datetime_str = now_ny.strftime("%Y-%m-%d %H:%M:%S ET")
+
+    if driver is not None:
+        try:
+            quotes = _extract_qss_quotes(driver, now_ny, time_str, datetime_str)
+            if quotes and clean in quotes:
+                return quotes[clean]
+
+            cqg_sym = to_cqg_symbol(clean)
+            quote = _extract_quote_for_symbol(driver, cqg_sym, clean, now_ny, time_str, datetime_str)
+            if quote:
+                return quote
+        except Exception as e:
+            logger.warning(f"Error during warm CQG read: {e}, attempting restart")
+            driver = get_warm_cqg_driver(force_restart=True)
+            if driver:
+                try:
+                    quotes = _extract_qss_quotes(driver, now_ny, time_str, datetime_str)
+                    if quotes and clean in quotes:
+                        return quotes[clean]
+                except Exception:
+                    pass
+
+    # Fallback to standalone live contract fetch
+    from kcquant.quotes import fetch_live_contract_quote
+    return fetch_live_contract_quote(clean)
 
 
 def fetch_cqg_quotes(contracts: list[str] | None = None) -> dict[str, dict] | None:

@@ -25,8 +25,8 @@ def test_build_quick_order_keyboard():
     assert "SELL 1 KC Z26 Market" in rows[0][1]["text"]
 
     # Check callback_data
-    assert rows[0][0]["callback_data"] == "ord:BUY:KCZ26:MKT:306.85"
-    assert rows[0][1]["callback_data"] == "ord:SELL:KCZ26:MKT:306.85"
+    assert rows[0][0]["callback_data"] == "ord:BUY:KCZ26:MKT"
+    assert rows[0][1]["callback_data"] == "ord:SELL:KCZ26:MKT"
 
 
 def test_place_paper_order_and_position_tracking(tmp_path):

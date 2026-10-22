@@ -33,18 +33,18 @@ def get_orders_dir() -> Path:
     return d
 
 
-def build_quick_order_keyboard(kcz26_price: float, kch27_price: float | None = None) -> dict:
+def build_quick_order_keyboard(kcz26_price: float | None = None, kch27_price: float | None = None) -> dict:
     """Build the quick tap Market order buttons."""
     return {
         "inline_keyboard": [
             [
                 {
                     "text": "🟢 BUY 1 KC Z26 Market",
-                    "callback_data": f"ord:BUY:KCZ26:MKT:{kcz26_price:.2f}"
+                    "callback_data": "ord:BUY:KCZ26:MKT"
                 },
                 {
                     "text": "🔴 SELL 1 KC Z26 Market",
-                    "callback_data": f"ord:SELL:KCZ26:MKT:{kcz26_price:.2f}"
+                    "callback_data": "ord:SELL:KCZ26:MKT"
                 }
             ]
         ]
@@ -54,17 +54,19 @@ def build_quick_order_keyboard(kcz26_price: float, kch27_price: float | None = N
 def place_paper_order(
     side: str,
     contract: str,
-    order_type: str,
+    order_type: str = "MARKET",
     qty: int = 1,
     target_price: float | None = None,
     live_price: float | None = None,
     orders_dir: Path | None = None,
 ) -> tuple[dict, dict]:
-    """Execute and record a simulated paper order.
+    """Execute and record a simulated paper order using real-time instant CQG market price.
 
     Returns:
         (order_dict, updated_positions_dict)
     """
+    import time
+    t_start = time.time()
     out_dir = orders_dir or get_orders_dir()
     orders_file = out_dir / "paper_orders.jsonl"
     pos_file = out_dir / "positions.json"
@@ -76,11 +78,46 @@ def place_paper_order(
     now_ny = datetime.now(NY_TZ)
     order_id = f"ORD-{now_ny.strftime('%Y%m%d')}-{uuid.uuid4().hex[:6].upper()}"
 
-    # Determine execution fill price
-    if order_type == "MARKET":
-        fill_price = round(live_price or target_price or 300.0, 2)
-    else:  # LIMIT
-        fill_price = round(target_price or live_price or 300.0, 2)
+    bid_px = 0.0
+    ask_px = 0.0
+    source_label = "Manual"
+    fill_side = "Trade"
+
+    # Fetch instant real-time price from CQG at the exact moment of placement
+    if order_type == "MARKET" and live_price is None:
+        try:
+            from kcquant.cqg import fetch_instant_cqg_quote
+            quote = fetch_instant_cqg_quote(contract)
+        except Exception:
+            quote = None
+
+        if quote:
+            trade_px = float(quote.get("price", 0.0))
+            bid_px = float(quote.get("bid", trade_px))
+            ask_px = float(quote.get("ask", trade_px))
+            source_label = quote.get("source", "CQG Desktop (Live)")
+
+            if side == "BUY":
+                fill_price = ask_px if ask_px > 0 else trade_px
+                fill_side = "Ask"
+            else:  # SELL
+                fill_price = bid_px if bid_px > 0 else trade_px
+                fill_side = "Bid"
+        else:
+            fill_price = round(target_price or 305.0, 2)
+            bid_px = fill_price
+            ask_px = fill_price
+    elif order_type == "LIMIT":
+        fill_price = round(target_price or live_price or 305.0, 2)
+        bid_px = fill_price
+        ask_px = fill_price
+        fill_side = "Limit"
+    else:
+        fill_price = round(live_price or target_price or 305.0, 2)
+        bid_px = fill_price
+        ask_px = fill_price
+
+    latency_ms = int((time.time() - t_start) * 1000)
 
     order_record = {
         "order_id": order_id,
@@ -91,7 +128,13 @@ def place_paper_order(
         "qty": int(qty),
         "order_type": order_type,
         "limit_price": round(target_price, 2) if target_price is not None else None,
-        "fill_price": fill_price,
+        "fill_price": round(fill_price, 2),
+        "fill_side": fill_side,
+        "bid": round(bid_px, 2),
+        "ask": round(ask_px, 2),
+        "spread_cents": round(ask_px - bid_px, 2) if ask_px and bid_px else 0.0,
+        "source": source_label,
+        "latency_ms": latency_ms,
         "status": "FILLED",
         "contract_size_lbs": CONTRACT_SIZE_LBS,
         "notional_usd": round(fill_price * CONTRACT_SIZE_LBS / 100.0 * qty, 2),
@@ -245,12 +288,24 @@ def format_order_confirmation_html(order: dict, pos: dict | None = None) -> str:
     u_pnl = pos_info.get("unrealized_pnl_usd", 0.0)
     u_pnl_sign = f"+${u_pnl:,.2f}" if u_pnl >= 0 else f"-${abs(u_pnl):,.2f}"
 
+    fill_side = order.get("fill_side", "")
+    fill_side_str = f" ({fill_side})" if fill_side else ""
+    bid = order.get("bid", 0.0)
+    ask = order.get("ask", 0.0)
+    source = order.get("source", "CQG Desktop (Live)")
+    latency = order.get("latency_ms")
+
+    ba_line = f"• <b>Market B/A:</b> <code>{bid:.2f} / {ask:.2f}¢</code>\n" if (bid > 0 and ask > 0) else ""
+    latency_str = f" <i>({latency}ms)</i>" if latency is not None else ""
+
     return (
         f"{side_icon} <b>Paper Order Executed</b>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"• <b>Action:</b> <b>{side} {qty} {contract}</b>\n"
         f"• <b>Type:</b> <code>{order_type}</code>\n"
-        f"• <b>Fill Price:</b> <code>{fill_px:.2f}¢</code>\n"
+        f"• <b>Fill Price:</b> <code>{fill_px:.2f}¢</code>{fill_side_str}\n"
+        + ba_line +
+        f"• <b>Source:</b> <code>{source}</code>{latency_str}\n"
         f"• <b>Notional:</b> <code>${order.get('notional_usd', 0.0):,.2f}</code>\n"
         f"• <b>Order ID:</b> <code>{order_id}</code>\n"
         f"• <b>Time:</b> <i>{time_str}</i>\n"

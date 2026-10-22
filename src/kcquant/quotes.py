@@ -83,6 +83,28 @@ def fetch_live_zh_quotes() -> dict | None:
     }
 
 
+def fetch_live_curve_quotes() -> dict | None:
+    """Fetch concurrent live quotes for KCZ26, KCH27, and KCK27, computing Z/H and H/K spreads."""
+    z_q = fetch_live_contract_quote("KCZ26")
+    h_q = fetch_live_contract_quote("KCH27")
+    k_q = fetch_live_contract_quote("KCK27")
+
+    if z_q is None or h_q is None or k_q is None:
+        return None
+
+    spread_zh = round(z_q["price"] - h_q["price"], 2)
+    spread_hk = round(h_q["price"] - k_q["price"], 2)
+    return {
+        "kcz26": z_q,
+        "kch27": h_q,
+        "kck27": k_q,
+        "spread_zh": spread_zh,
+        "spread_hk": spread_hk,
+        "quote_time_ny": z_q["datetime_ny"],
+        "source": f"Live Market (ICE / Yahoo · {z_q['time_str']})"
+    }
+
+
 def sync_databento_settles(raw_curve_file: Path | None = None) -> bool:
     """Check Databento for newly settled daily bars and append to raw curve CSV if available."""
     load_env()
@@ -260,4 +282,112 @@ def get_latest_prices(
         "kcz26": z_fallback,
         "kch27": h_fallback,
         "spread": round(z_fallback - h_fallback, 2)
+    }
+
+
+def get_latest_kc_curve_prices(
+    raw_file: Path | None = None,
+    z_override: float | None = None,
+    h_override: float | None = None,
+    k_override: float | None = None,
+    prefer_live: bool = True
+) -> dict:
+    """Retrieve the freshest KCZ26, KCH27, and KCK27 futures prices and calendar spreads.
+
+    Resolution order:
+      1. Manual CLI overrides (--z-price, --h-price, --k-price)
+      2. Live intraday market streaming (Yahoo / ICE NY live quotes)
+      3. Databento official settlement sync
+      4. Local raw curve settlement cache
+      5. Baseline fallback
+
+    Returns dict with keys:
+      kcz26, kch27, kck27, spread_zh, spread_hk, price_source, quote_time_ny
+    """
+    monitor_dir = ROOT / "output" / "monitor"
+    monitor_dir.mkdir(parents=True, exist_ok=True)
+    cache_json = monitor_dir / "latest_kc_curve_prices.json"
+    raw_path = raw_file or (ROOT / "output" / "KC_databento_fixed_raw_curve.csv")
+
+    # 1. Manual Overrides
+    if z_override is not None and h_override is not None and k_override is not None:
+        src = "CLI Manual Override"
+        res = {
+            "kcz26": float(z_override),
+            "kch27": float(h_override),
+            "kck27": float(k_override),
+            "spread_zh": round(z_override - h_override, 2),
+            "spread_hk": round(h_override - k_override, 2),
+            "price_source": src,
+            "quote_time_ny": datetime.now(NY_TZ).strftime("%Y-%m-%d %H:%M ET")
+        }
+        with open(cache_json, "w") as f:
+            json.dump(res, f, indent=2)
+        return res
+
+    # 2. Live Market Quotes
+    if prefer_live:
+        live = fetch_live_curve_quotes()
+        if live is not None:
+            z_px = live["kcz26"]["price"]
+            h_px = live["kch27"]["price"]
+            k_px = live["kck27"]["price"]
+            res = {
+                "kcz26": z_px,
+                "kch27": h_px,
+                "kck27": k_px,
+                "spread_zh": live["spread_zh"],
+                "spread_hk": live["spread_hk"],
+                "price_source": live["source"],
+                "quote_time_ny": live["quote_time_ny"],
+                "live_meta": live
+            }
+            with open(cache_json, "w") as f:
+                json.dump(res, f, indent=2)
+            return res
+
+    # 3. Check Databento settles
+    try:
+        sync_databento_settles(raw_path)
+    except Exception:
+        pass
+
+    # 4. Check local CSV raw curve
+    if raw_path.exists():
+        df = pd.read_csv(raw_path)
+        cols = ["KCZ26", "KCH27", "KCK27"]
+        if all(c in df.columns for c in cols):
+            valid = df.dropna(subset=cols)
+            if len(valid) > 0:
+                last_row = valid.iloc[-1]
+                z_px = float(last_row["KCZ26"])
+                h_px = float(last_row["KCH27"])
+                k_px = float(last_row["KCK27"])
+                dt_str = str(last_row["trade_date"])
+                res = {
+                    "kcz26": z_px,
+                    "kch27": h_px,
+                    "kck27": k_px,
+                    "spread_zh": round(z_px - h_px, 2),
+                    "spread_hk": round(h_px - k_px, 2),
+                    "price_source": f"Settlement Settle ({dt_str})",
+                    "quote_time_ny": f"{dt_str} Close",
+                    "trade_date": dt_str
+                }
+                with open(cache_json, "w") as f:
+                    json.dump(res, f, indent=2)
+                return res
+
+    # 5. Fallback defaults
+    z_fallback = 305.00
+    h_fallback = 292.25
+    k_fallback = 287.35
+    return {
+        "kcz26": z_fallback,
+        "kch27": h_fallback,
+        "kck27": k_fallback,
+        "spread_zh": round(z_fallback - h_fallback, 2),
+        "spread_hk": round(h_fallback - k_fallback, 2),
+        "price_source": "Baseline Default",
+        "quote_time_ny": "N/A"
     }

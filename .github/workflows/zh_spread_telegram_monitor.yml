@@ -1,11 +1,11 @@
-name: KC Coffee Z/H Spread Monitor (Telegram Bot)
+name: KC Coffee Market & Inventory Monitor (Telegram Bot)
 
 on:
   schedule:
     # Run at :15 and :45 past each hour (the python script internally guards active ICE market hours)
     - cron: '15,45 * * * *'
   repository_dispatch:
-    types: [zh-monitor]
+    types: [kc-monitor, zh-monitor]
   workflow_dispatch:
     inputs:
       force:
@@ -20,7 +20,7 @@ on:
         default: false
 
 concurrency:
-  group: zh-spread-monitor
+  group: kc-market-monitor
   cancel-in-progress: false
 
 jobs:
@@ -43,7 +43,7 @@ jobs:
           pip install -r requirements.txt
           pip install -e .
 
-      - name: Run Telegram Z/H Monitor
+      - name: Run KC Market & Inventory Monitor
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -56,4 +56,4 @@ jobs:
           if [ "${{ github.event.inputs.settle_only }}" = "true" ]; then
             ARGS="$ARGS --settle-only"
           fi
-          python scripts/telegram_zh_bot.py $ARGS
+          python scripts/telegram_kc_bot.py $ARGS

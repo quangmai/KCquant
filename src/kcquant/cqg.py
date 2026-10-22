@@ -182,8 +182,14 @@ def fetch_cqg_quotes(contracts: list[str] | None = None) -> dict[str, dict] | No
             else:
                 pass_input.submit()
 
-            # Wait for logon redirect out of logon page
-            time.sleep(5)
+            # Poll for logon redirect into desktop/main
+            for _ in range(int(timeout * 2)):
+                time.sleep(0.5)
+                if "desktop/main" in driver.current_url:
+                    break
+
+            # Give DOM and streaming WebSocket 3 seconds to populate prices
+            time.sleep(3)
 
         # Inspect if login failed
         page_source = driver.page_source.lower()
@@ -191,14 +197,34 @@ def fetch_cqg_quotes(contracts: list[str] | None = None) -> dict[str, dict] | No
             logger.error("CQG Desktop logon rejected: Invalid credentials or authentication failed.")
             return None
 
+        # Wait for QSS element or main quotes table to be present
+        try:
+            wait.until(
+                EC.presence_of_element_located((
+                    By.XPATH,
+                    '//*[contains(@class, "wpfe-quotes")] | //wpfe-quote-spread-sheet'
+                ))
+            )
+            time.sleep(2)
+        except Exception:
+            pass
+
         # Look for quote board / tables / watchlist elements
         now_ny = datetime.now(NY_TZ)
         time_str = now_ny.strftime("%H:%M ET")
         datetime_str = now_ny.strftime("%Y-%m-%d %H:%M ET")
 
+        # 1. Primary extractor: Parse CQG Desktop QSS (Quote SpreadSheet)
+        qss_results = _extract_qss_quotes(driver, now_ny, time_str, datetime_str)
+        if qss_results:
+            # Filter for requested targets
+            matched = {k: v for k, v in qss_results.items() if k in target_contracts}
+            if len(matched) > 0:
+                return matched
+
         results: dict[str, dict] = {}
 
-        # Search for contract symbols in table rows or text containers
+        # 2. Secondary fallback extractor: search individual table rows or text containers
         for ice_sym, cqg_sym in cqg_targets.items():
             quote = _extract_quote_for_symbol(driver, cqg_sym, ice_sym, now_ny, time_str, datetime_str)
             if quote:
@@ -216,6 +242,76 @@ def fetch_cqg_quotes(contracts: list[str] | None = None) -> dict[str, dict] | No
             driver.quit()
         except Exception:
             pass
+
+
+def _extract_qss_quotes(
+    driver,
+    now_ny: datetime,
+    time_str: str,
+    datetime_str: str
+) -> dict[str, dict]:
+    """Extract quotes from CQG Desktop's Quote SpreadSheet (QSS) widget."""
+    from selenium.webdriver.common.by import By
+
+    results: dict[str, dict] = {}
+    qss_elems = driver.find_elements(By.TAG_NAME, "wpfe-quote-spread-sheet")
+    if not qss_elems:
+        qss_elems = driver.find_elements(
+            By.XPATH,
+            "//*[contains(@class, 'wpfe-quote-spread-sheet') or contains(@class, 'wpfe-quotes-pane')]"
+        )
+
+    for el in qss_elems:
+        text = el.text
+        # Matches KCEZ26 or F.US.KCEZ26
+        sym_matches = re.findall(r"(?:F\.US\.)?(KCE[FGHJKMNQUVXZ]\d{1,2})\b", text)
+        if not sym_matches:
+            continue
+
+        # Extract numeric lines after the last symbol
+        last_sym_pos = max(text.find(s) for s in sym_matches)
+        num_text = text[last_sym_pos:]
+        num_lines = [
+            line.strip()
+            for line in num_text.splitlines()
+            if re.match(r"^[-+]?\d+\.?\d*$", line.strip())
+        ]
+
+        if len(num_lines) >= len(sym_matches) * 4:
+            for i, cqg_sym in enumerate(sym_matches):
+                ice_sym = to_ice_symbol(cqg_sym)
+                chunk = num_lines[i * 4 : (i + 1) * 4]
+                try:
+                    trade = float(chunk[0])
+                    bid = float(chunk[1])
+                    ask = float(chunk[2])
+                    change = float(chunk[3])
+                    prev_close = round(trade - change, 2)
+                    high = max(trade, bid, ask)
+                    low = min(trade, bid, ask)
+
+                    results[ice_sym] = {
+                        "contract": ice_sym,
+                        "cqg_symbol": cqg_sym,
+                        "price": trade,
+                        "bid": bid,
+                        "ask": ask,
+                        "change": change,
+                        "prev_close": prev_close,
+                        "high": high,
+                        "low": low,
+                        "volume": 0,
+                        "datetime_ny": datetime_str,
+                        "time_str": time_str,
+                        "source": f"Live Market (CQG Desktop · {time_str})",
+                    }
+                except (ValueError, IndexError):
+                    continue
+
+            if len(results) > 0:
+                return results
+
+    return results
 
 
 def _extract_quote_for_symbol(

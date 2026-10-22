@@ -71,6 +71,11 @@ def test_format_telegram_html_clean_structure():
     assert "Grading Pass Rate (7d): <code>65.3%</code> (<code>+11.2%</code>)" in html
     assert "Total Pipeline: <code>257,764 bags</code>" in html
 
+    # Header check
+    assert "<b>KC Monitor</b>" in html
+    assert "Source:" not in html
+    assert "As-of Report:" not in html
+
     # Must NOT contain trading positions, strategy milestones, or status
     assert "HOLD_POSITION" not in html
     assert "TAKE PROFIT" not in html

@@ -1,4 +1,4 @@
-name: KC Coffee Market & Inventory Monitor (Telegram Bot)
+name: KC Monitor (Telegram Bot)
 
 on:
   schedule:

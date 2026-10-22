@@ -11,6 +11,12 @@ from kcquant.quotes import (
 )
 
 
+@pytest.fixture(autouse=True)
+def disable_cqg_in_unit_tests(monkeypatch):
+    """Ensure unit tests do not hit live browser automation."""
+    monkeypatch.setattr("kcquant.cqg.fetch_cqg_quotes", lambda *args, **kwargs: None)
+
+
 def test_fetch_live_contract_quote_mock_success():
     mock_payload = {
         "chart": {

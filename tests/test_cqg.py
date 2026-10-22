@@ -24,6 +24,8 @@ def test_symbol_conversion():
 
 
 def test_get_cqg_credentials_empty(monkeypatch):
+    import kcquant.cqg as cqg_mod
+    monkeypatch.setattr(cqg_mod, "_ENV_LOADED", True)
     monkeypatch.delenv("CQG_USERNAME", raising=False)
     monkeypatch.delenv("CQG_USER", raising=False)
     monkeypatch.delenv("CQG_PASSWORD", raising=False)
@@ -33,9 +35,12 @@ def test_get_cqg_credentials_empty(monkeypatch):
 
 
 def test_get_cqg_credentials_configured(monkeypatch):
+    import kcquant.cqg as cqg_mod
+    monkeypatch.setattr(cqg_mod, "_ENV_LOADED", True)
     monkeypatch.setenv("CQG_USERNAME", "trader_joe")
     monkeypatch.setenv("CQG_PASSWORD", "secret123")
     monkeypatch.setenv("CQG_BROKER", "ironbeam")
+    monkeypatch.delenv("CQG_URL", raising=False)
 
     creds = get_cqg_credentials()
     assert creds is not None
@@ -54,17 +59,23 @@ def test_parse_numbers_from_text():
 
 
 def test_fetch_cqg_quotes_missing_credentials(monkeypatch):
+    import kcquant.cqg as cqg_mod
+    monkeypatch.setattr(cqg_mod, "_ENV_LOADED", True)
     monkeypatch.delenv("CQG_USERNAME", raising=False)
     monkeypatch.delenv("CQG_USER", raising=False)
     monkeypatch.delenv("CQG_PASSWORD", raising=False)
+    monkeypatch.delenv("CQG_PASS", raising=False)
 
     assert fetch_cqg_quotes(["KCZ26", "KCH27"]) is None
 
 
 def test_quotes_fallback_when_cqg_unconfigured(monkeypatch):
+    import kcquant.cqg as cqg_mod
+    monkeypatch.setattr(cqg_mod, "_ENV_LOADED", True)
     monkeypatch.delenv("CQG_USERNAME", raising=False)
     monkeypatch.delenv("CQG_USER", raising=False)
     monkeypatch.delenv("CQG_PASSWORD", raising=False)
+    monkeypatch.delenv("CQG_PASS", raising=False)
 
     # Calling fetch_live_contract_quote should not fail even without CQG
     with patch("requests.get") as mock_get:

@@ -140,8 +140,7 @@ def print_dashboard(data: dict):
     reset = "\033[0m"
 
     print("\n" + "=" * 74)
-    print(f"{header_color}  KC COFFEE 'C' MARKET & INVENTORY MONITOR  {reset}")
-    print(f"  Source: {data['price_source']}  |  As of: {data['as_of_report_date']}")
+    print(f"{header_color}  KC Monitor  {reset}")
     print("=" * 74)
 
     print(f"\n  📊 KC OUTRIGHT FUTURES PRICES:")

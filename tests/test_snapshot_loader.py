@@ -102,7 +102,7 @@ def test_fetch_is_incremental_and_normalises(tmp_path):
     n_calls = len(ld.client.timeseries.calls)
     # 10 weekdays; no-evening day needs 2 requests, early-close day needs 3
     assert n_calls == 13
-    assert ld.fallback_days == [pd.Timestamp("2026-08-06"), pd.Timestamp("2026-08-12")]
+    assert set(ld.fallback_days) == {pd.Timestamp("2026-08-06"), pd.Timestamp("2026-08-12")}
     td = set(panel.loc[panel.contract == "KCZ26", "trade_date"])
     assert set(pd.bdate_range("2026-08-03", "2026-08-14")) <= td   # no day lost
     early = panel[(panel.contract == "KCZ26") & (panel.trade_date == "2026-08-04")].iloc[0]

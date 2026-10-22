@@ -73,7 +73,7 @@ def format_telegram_html(data: dict, is_forced: bool = False) -> str:
     time_str = now_ny.strftime("%b %d, %Y · %H:%M ET")
 
     banner = (
-        "☕ <b>KC COFFEE 'C' MARKET & INVENTORY MONITOR</b>\n"
+        "☕ <b>KC Monitor</b>\n"
         f"<i>{time_str}</i> {'(Ad-hoc)' if is_forced else ''}\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
     )
@@ -82,8 +82,7 @@ def format_telegram_html(data: dict, is_forced: bool = False) -> str:
         f"📊 <b>KC Futures Prices:</b>\n"
         f"• KCZ26 (Dec 26): <code>{data['kcz26_price']:.2f}¢</code>\n"
         f"• KCH27 (Mar 27): <code>{data['kch27_price']:.2f}¢</code>\n"
-        f"• KCK27 (May 27): <code>{data['kck27_price']:.2f}¢</code>\n"
-        f"• <b>Source:</b> <i>{data['price_source']}</i>\n\n"
+        f"• KCK27 (May 27): <code>{data['kck27_price']:.2f}¢</code>\n\n"
     )
 
     spreads_section = (
@@ -105,8 +104,7 @@ def format_telegram_html(data: dict, is_forced: bool = False) -> str:
         f"• Pending for Grading: <code>{data['pending_grading_bags']:,} bags</code> ({data['pending_delta_bags']:+,})\n"
         f"• Graded Today: {graded_str}\n"
         f"• Grading Pass Rate (7d): <code>{data.get('pass_rate_7d', 0.0):.1f}%</code> (<code>{data.get('pass_rate_7d_delta', 0.0):+.1f}%</code>)\n"
-        f"• Total Pipeline: <code>{data['total_pipeline_bags']:,} bags</code>\n"
-        f"• As-of Report: <i>{data['as_of_report_date']}</i>"
+        f"• Total Pipeline: <code>{data['total_pipeline_bags']:,} bags</code>"
     )
 
     return banner + prices_section + spreads_section + inventory_section

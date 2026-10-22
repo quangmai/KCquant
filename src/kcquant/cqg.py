@@ -60,12 +60,19 @@ def to_ice_symbol(cqg_symbol: str) -> str:
     return clean
 
 
-def get_cqg_credentials() -> dict[str, str] | None:
+_ENV_LOADED = False
+
+
+def get_cqg_credentials(reload_env: bool = False) -> dict[str, str] | None:
     """Check for CQG credentials in environment.
 
     Returns dict of credentials if configured, otherwise None.
     """
-    load_env()
+    global _ENV_LOADED
+    if not _ENV_LOADED or reload_env:
+        load_env()
+        _ENV_LOADED = True
+
     username = os.environ.get("CQG_USERNAME") or os.environ.get("CQG_USER")
     password = os.environ.get("CQG_PASSWORD") or os.environ.get("CQG_PASS")
 

@@ -48,6 +48,10 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           DATABENTO_API_KEY: ${{ secrets.DATABENTO_API_KEY }}
+          CQG_USERNAME: ${{ secrets.CQG_USERNAME }}
+          CQG_PASSWORD: ${{ secrets.CQG_PASSWORD }}
+          CQG_BROKER: ${{ secrets.CQG_BROKER }}
+          CQG_URL: ${{ secrets.CQG_URL }}
         run: |
           ARGS=""
           if [ "${{ github.event.inputs.force }}" = "true" ]; then

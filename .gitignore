@@ -7,6 +7,7 @@ __pycache__/
 # Environment and sensitive keys
 .env
 .env.*
+!.env.example
 
 # OS files
 .DS_Store

@@ -25,8 +25,19 @@ NY_TZ = ZoneInfo("America/New_York")
 def fetch_live_contract_quote(contract: str, timeout: float = 6.0) -> dict | None:
     """Fetch live intraday market quote for an ICE Coffee 'C' contract (e.g. 'KCZ26' -> 'KCZ26.NYB').
 
-    Returns a dict with price, prev_close, high, low, volume, timestamp, and formatted NY time.
+    Prioritizes CQG Desktop if credentials are configured in .env, with automatic fallback
+    to Yahoo Finance.
     """
+    # 1. Attempt CQG Desktop if credentials configured
+    try:
+        from kcquant.cqg import fetch_cqg_quotes
+        cqg_res = fetch_cqg_quotes([contract])
+        if cqg_res and contract in cqg_res:
+            return cqg_res[contract]
+    except Exception:
+        pass
+
+    # 2. Yahoo Finance fallback
     ticker = f"{contract}.NYB" if not contract.endswith(".NYB") else contract
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1m&range=1d"
     headers = {
@@ -59,7 +70,8 @@ def fetch_live_contract_quote(contract: str, timeout: float = 6.0) -> dict | Non
             "volume": int(meta.get("regularMarketVolume", 0)) if meta.get("regularMarketVolume") is not None else 0,
             "timestamp": ts,
             "datetime_ny": dt_ny.strftime("%Y-%m-%d %H:%M ET"),
-            "time_str": dt_ny.strftime("%H:%M ET")
+            "time_str": dt_ny.strftime("%H:%M ET"),
+            "source": f"Live Market (ICE / Yahoo · {dt_ny.strftime('%H:%M ET')})"
         }
     except Exception:
         return None
@@ -67,6 +79,24 @@ def fetch_live_contract_quote(contract: str, timeout: float = 6.0) -> dict | Non
 
 def fetch_live_zh_quotes() -> dict | None:
     """Fetch concurrent live quotes for KCZ26 and KCH27."""
+    # 1. Attempt batch CQG Desktop fetch first
+    try:
+        from kcquant.cqg import fetch_cqg_quotes
+        cqg_res = fetch_cqg_quotes(["KCZ26", "KCH27"])
+        if cqg_res and "KCZ26" in cqg_res and "KCH27" in cqg_res:
+            z_q = cqg_res["KCZ26"]
+            h_q = cqg_res["KCH27"]
+            spread = round(z_q["price"] - h_q["price"], 2)
+            return {
+                "kcz26": z_q,
+                "kch27": h_q,
+                "spread_cents": spread,
+                "quote_time_ny": z_q["datetime_ny"],
+                "source": f"Live Market (CQG Desktop · {z_q['time_str']})"
+            }
+    except Exception:
+        pass
+
     z_q = fetch_live_contract_quote("KCZ26")
     h_q = fetch_live_contract_quote("KCH27")
 
@@ -79,12 +109,35 @@ def fetch_live_zh_quotes() -> dict | None:
         "kch27": h_q,
         "spread_cents": spread,
         "quote_time_ny": z_q["datetime_ny"],
-        "source": f"Live Market (ICE / Yahoo · {z_q['time_str']})"
+        "source": z_q.get("source", f"Live Market (ICE / Yahoo · {z_q['time_str']})")
     }
 
 
 def fetch_live_curve_quotes() -> dict | None:
     """Fetch concurrent live quotes for KCZ26, KCH27, and KCK27, computing Z/H and H/K spreads."""
+    # 1. Attempt batch CQG Desktop fetch first
+    try:
+        from kcquant.cqg import fetch_cqg_quotes
+        cqg_res = fetch_cqg_quotes(["KCZ26", "KCH27", "KCK27"])
+        if cqg_res and "KCZ26" in cqg_res and "KCH27" in cqg_res and "KCK27" in cqg_res:
+            z_q = cqg_res["KCZ26"]
+            h_q = cqg_res["KCH27"]
+            k_q = cqg_res["KCK27"]
+            spread_zh = round(z_q["price"] - h_q["price"], 2)
+            spread_hk = round(h_q["price"] - k_q["price"], 2)
+            return {
+                "kcz26": z_q,
+                "kch27": h_q,
+                "kck27": k_q,
+                "spread_zh": spread_zh,
+                "spread_hk": spread_hk,
+                "quote_time_ny": z_q["datetime_ny"],
+                "source": f"Live Market (CQG Desktop · {z_q['time_str']})"
+            }
+    except Exception:
+        pass
+
+    # 2. Individual live fetch fallback
     z_q = fetch_live_contract_quote("KCZ26")
     h_q = fetch_live_contract_quote("KCH27")
     k_q = fetch_live_contract_quote("KCK27")
@@ -101,7 +154,7 @@ def fetch_live_curve_quotes() -> dict | None:
         "spread_zh": spread_zh,
         "spread_hk": spread_hk,
         "quote_time_ny": z_q["datetime_ny"],
-        "source": f"Live Market (ICE / Yahoo · {z_q['time_str']})"
+        "source": z_q.get("source", f"Live Market (ICE / Yahoo · {z_q['time_str']})")
     }
 
 

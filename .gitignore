@@ -21,6 +21,7 @@ output/monitor/*.log
 output/monitor/*.json
 output/monitor/*.jsonl
 output/monitor/*.csv
+output/monitor/*.png
 output/*.parquet
 
 # IDE / Editor files

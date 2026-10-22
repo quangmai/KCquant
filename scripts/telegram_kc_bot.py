@@ -112,8 +112,9 @@ def format_telegram_html(data: dict, is_forced: bool = False) -> str:
 
 def run_telegram_update(force: bool = False, z_price: float | None = None,
                         h_price: float | None = None, k_price: float | None = None,
-                        no_download: bool = False, prefer_live: bool = True) -> tuple[bool, str]:
-    """Execute a single monitor check and dispatch to Telegram."""
+                        no_download: bool = False, prefer_live: bool = True,
+                        samples: int = 1, sample_interval: int = 300) -> tuple[bool, str]:
+    """Execute monitor check, record 5m intraday snapshot, generate chart, and dispatch to Telegram."""
     now_ny = datetime.now(NY_TZ)
     is_open, reason = is_market_open(now_ny)
 
@@ -128,19 +129,38 @@ def run_telegram_update(force: bool = False, z_price: float | None = None,
         download_latest_reports(stock_dir, days_back=7)
 
     cert_df = load_cert_stocks(ROOT / "data" / "fundamentals")
-    prices = get_latest_kc_curve_prices(
-        raw_file=raw_curve_file,
-        z_override=z_price,
-        h_override=h_price,
-        k_override=k_price,
-        prefer_live=prefer_live
-    )
 
-    result = evaluate_market_data(prices, cert_df)
-    persist_results(result, monitor_dir)
+    from kcquant.charting import record_cqg_intraday_snapshot, generate_intraday_5m_chart
+    from kcquant.notify import send_telegram_photo
+
+    result = None
+    for s_idx in range(max(1, samples)):
+        prices = get_latest_kc_curve_prices(
+            raw_file=raw_curve_file,
+            z_override=z_price,
+            h_override=h_price,
+            k_override=k_price,
+            prefer_live=prefer_live
+        )
+        result = evaluate_market_data(prices, cert_df)
+        persist_results(result, monitor_dir)
+        record_cqg_intraday_snapshot(result)
+
+        if s_idx < samples - 1:
+            time.sleep(sample_interval)
+
+    # Generate 5-minute price line chart
+    chart_path = generate_intraday_5m_chart()
 
     msg_html = format_telegram_html(result, is_forced=force and not is_open)
-    success, res_str = send_telegram_message(msg_html)
+
+    # Deliver via photo card with HTML caption (with fallback to text message)
+    if chart_path and chart_path.exists():
+        success, res_str = send_telegram_photo(chart_path, caption=msg_html)
+        if not success:
+            success, res_str = send_telegram_message(msg_html)
+    else:
+        success, res_str = send_telegram_message(msg_html)
 
     # Log to jsonl
     log_file = monitor_dir / "kc_telegram_log.jsonl"
@@ -151,6 +171,7 @@ def run_telegram_update(force: bool = False, z_price: float | None = None,
             "market_open": is_open,
             "telegram_sent": success,
             "telegram_result": res_str,
+            "chart_attached": bool(chart_path and chart_path.exists()),
             "spread_zh_cents": result["spread_zh_cents"],
             "spread_hk_cents": result["spread_hk_cents"]
         }
@@ -171,6 +192,8 @@ def main():
     ap.add_argument("--k-price", type=float, help="Override KCK27 price in cents/lb")
     ap.add_argument("--settle-only", action="store_true", help="Use official daily settle instead of live intraday quote")
     ap.add_argument("--no-download", action="store_true", help="Skip ICE report download")
+    ap.add_argument("--samples", type=int, default=1, help="Number of 5-min samples to record in this run (default: 1)")
+    ap.add_argument("--sample-interval", type=int, default=300, help="Interval between samples in seconds (default: 300 [5m])")
     args = ap.parse_args()
 
     if args.test:
@@ -199,12 +222,14 @@ def main():
                 now_ny = datetime.now(NY_TZ)
                 is_open, reason = is_market_open(now_ny)
                 if is_open or args.force:
-                    print(f"[{now_ny:%H:%M:%S ET}] Market is open. Running 30-min update...")
+                    print(f"[{now_ny:%H:%M:%S ET}] Market is open. Running 15-min update...")
                     ok, res = run_telegram_update(
                         force=args.force, z_price=args.z_price,
                         h_price=args.h_price, k_price=args.k_price,
                         no_download=args.no_download,
-                        prefer_live=not args.settle_only
+                        prefer_live=not args.settle_only,
+                        samples=args.samples,
+                        sample_interval=args.sample_interval
                     )
                     print(f"    Result: {'Sent' if ok else 'Failed'} ({res})")
                 else:
@@ -223,7 +248,9 @@ def main():
         force=args.force, z_price=args.z_price,
         h_price=args.h_price, k_price=args.k_price,
         no_download=args.no_download,
-        prefer_live=not args.settle_only
+        prefer_live=not args.settle_only,
+        samples=args.samples,
+        sample_interval=args.sample_interval
     )
     print(f"[*] Status: {'Delivered' if ok else 'Notice'} - {res}")
 

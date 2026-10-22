@@ -2,8 +2,8 @@ name: KC Monitor (Telegram Bot)
 
 on:
   schedule:
-    # Run at :15 and :45 past each hour (the python script internally guards active ICE market hours)
-    - cron: '15,45 * * * *'
+    # Run every 15 minutes at :00, :15, :30, :45 (guards active ICE market hours 04:15 - 13:30 ET)
+    - cron: '*/15 * * * *'
   repository_dispatch:
     types: [kc-monitor, zh-monitor]
   workflow_dispatch:

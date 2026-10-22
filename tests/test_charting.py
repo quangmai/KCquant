@@ -108,6 +108,38 @@ def test_generate_intraday_5m_chart(tmp_path):
     assert img_res.stat().st_size > 1000  # Non-trivial image file generated
 
 
+def test_generate_intraday_chart_15m_smoothing(tmp_path):
+    csv_file = tmp_path / "test_15m_data.csv"
+    out_img = tmp_path / "test_15m_chart.png"
+
+    # Create 8 5-minute points spanning > 30 minutes
+    rows = []
+    base_ts = 1729603800
+    for i in range(8):
+        dt_str = f"2026-10-22 09:{i*5:02d}"
+        rows.append({
+            "datetime_ny": dt_str,
+            "timestamp": base_ts + i * 300,
+            "kcz26": 305.0 - i * 0.2,
+            "kch27": 291.5 - i * 0.15,
+            "kck27": 287.0 - i * 0.1,
+            "spread_zh": 13.5 - i * 0.05,
+            "spread_hk": 4.5 - i * 0.05,
+        })
+    pd.DataFrame(rows).to_csv(csv_file, index=False)
+
+    img = generate_intraday_5m_chart(
+        csv_path=csv_file,
+        output_image=out_img,
+        interval_minutes=15,
+        prev_day_high=317.90,
+        prev_day_low=308.35
+    )
+    assert img is not None
+    assert img.exists()
+    assert img.stat().st_size > 1000
+
+
 def test_send_telegram_photo_success(tmp_path):
     fake_img = tmp_path / "chart.png"
     fake_img.write_bytes(b"\x89PNG\r\n\x1a\nfakeimagebytes")

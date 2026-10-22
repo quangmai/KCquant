@@ -176,17 +176,20 @@ def generate_intraday_5m_chart(
     prev_day_low: float | None = None,
     prev_day_date: str | None = None,
     contract: str = "KCZ26",
+    interval_minutes: int = 15,
 ) -> Path | None:
-    """Generate high-resolution 5-minute price line chart with dark aesthetics.
+    """Generate high-resolution smoothed price line chart with dark aesthetics.
 
-    Subplot 1: KCZ26, KCH27, KCK27 outright prices, with previous day high and low
-               drawn as crisp white lines to show if price has cut through the range.
-    Subplot 2: Z/H Spread and H/K Spread.
+    Subplot 1: KCZ26, KCH27, KCK27 outright prices smoothed at 15-minute intervals,
+               with previous day high and low drawn as crisp white lines to show if
+               price has cut through the range.
+    Subplot 2: Z/H Spread and H/K Spread smoothed at 15-minute intervals.
     """
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     import matplotlib.dates as mdates
+    import numpy as np
 
     path = csv_path or get_default_intraday_csv()
     out_img = output_image or get_default_chart_path()
@@ -195,13 +198,31 @@ def generate_intraday_5m_chart(
         return None
 
     try:
-        df = pd.read_csv(path)
-        if len(df) == 0:
+        df_raw = pd.read_csv(path)
+        if len(df_raw) == 0:
             return None
 
         # Filter for recent trading day/session (up to last 24 hours)
-        df["dt"] = pd.to_datetime(df["datetime_ny"])
-        df = df.sort_values("dt").reset_index(drop=True)
+        df_raw["dt"] = pd.to_datetime(df_raw["datetime_ny"])
+        df_raw = df_raw.sort_values("dt").reset_index(drop=True)
+
+        # Resample to specified interval (default 15 minutes) for smooth representation
+        if interval_minutes > 5 and len(df_raw) >= 3:
+            df = (
+                df_raw.set_index("dt")
+                .resample(f"{interval_minutes}min")
+                .last()
+                .dropna(subset=["kcz26"])
+                .reset_index()
+            )
+            # Ensure the very latest raw tick is included so live price is always current
+            if not df.empty and df_raw["dt"].iloc[-1] > df["dt"].iloc[-1]:
+                df = pd.concat([df, df_raw.iloc[[-1]]], ignore_index=True).drop_duplicates(subset=["dt"])
+        else:
+            df = df_raw
+
+        if len(df) == 0:
+            return None
 
         # Resolve previous day high/low if not explicitly provided
         pdh = prev_day_high
@@ -269,9 +290,34 @@ def generate_intraday_5m_chart(
                 bbox=dict(boxstyle="square,pad=0.2", fc="#141c26", ec="#ffffff", lw=0.8, alpha=0.9)
             )
 
-        ax1.plot(df["dt"], df["kcz26"], color=c_z, linewidth=2.2, label="KCZ26 (Dec 26)", marker="o", markersize=3.5, zorder=3)
-        ax1.plot(df["dt"], df["kch27"], color=c_h, linewidth=2.0, label="KCH27 (Mar 27)", marker="o", markersize=3.5, zorder=3)
-        ax1.plot(df["dt"], df["kck27"], color=c_k, linewidth=1.8, label="KCK27 (May 27)", marker="o", markersize=3.5, zorder=3)
+        # Smooth spline interpolation via PchipInterpolator
+        x_pts = df["dt"].apply(lambda t: t.timestamp()).values
+        can_smooth = len(x_pts) >= 4 and len(set(x_pts)) >= 4
+        if can_smooth:
+            try:
+                from scipy.interpolate import PchipInterpolator
+                x_smooth = np.linspace(x_pts[0], x_pts[-1], 250)
+                x_smooth_dt = [pd.to_datetime(ts, unit="s", utc=True).tz_convert(NY_TZ) for ts in x_smooth]
+
+                y_smooth_z = PchipInterpolator(x_pts, df["kcz26"])(x_smooth)
+                y_smooth_h = PchipInterpolator(x_pts, df["kch27"])(x_smooth)
+                y_smooth_k = PchipInterpolator(x_pts, df["kck27"])(x_smooth)
+
+                ax1.plot(x_smooth_dt, y_smooth_z, color=c_z, linewidth=2.3, label="KCZ26 (Dec 26)", zorder=3)
+                ax1.plot(x_smooth_dt, y_smooth_h, color=c_h, linewidth=2.1, label="KCH27 (Mar 27)", zorder=3)
+                ax1.plot(x_smooth_dt, y_smooth_k, color=c_k, linewidth=1.9, label="KCK27 (May 27)", zorder=3)
+
+                # Overlay 15-min interval markers
+                ax1.scatter(df["dt"], df["kcz26"], color=c_z, s=22, zorder=4, alpha=0.95)
+                ax1.scatter(df["dt"], df["kch27"], color=c_h, s=20, zorder=4, alpha=0.95)
+                ax1.scatter(df["dt"], df["kck27"], color=c_k, s=18, zorder=4, alpha=0.95)
+            except Exception:
+                can_smooth = False
+
+        if not can_smooth:
+            ax1.plot(df["dt"], df["kcz26"], color=c_z, linewidth=2.3, label="KCZ26 (Dec 26)", marker="o", markersize=4, zorder=3)
+            ax1.plot(df["dt"], df["kch27"], color=c_h, linewidth=2.1, label="KCH27 (Mar 27)", marker="o", markersize=4, zorder=3)
+            ax1.plot(df["dt"], df["kck27"], color=c_k, linewidth=1.9, label="KCK27 (May 27)", marker="o", markersize=4, zorder=3)
 
         # Annotate latest prices on ax1
         latest = df.iloc[-1]
@@ -328,18 +374,33 @@ def generate_intraday_5m_chart(
         ax1.set_ylabel("Price (¢/lb)", fontsize=10.5, color="#e0e0e0", labelpad=8)
         ax1.grid(True, color=grid_color, linestyle="--", linewidth=0.7, alpha=0.8)
         ax1.legend(loc="lower left", framealpha=0.85, facecolor=bg_color, edgecolor=grid_color, fontsize=8.5, ncol=3)
-        ax1.set_title("KC Coffee 'C' · 5-Minute Intraday Curve & Calendar Spreads", fontsize=13, fontweight="bold", color="#ffffff", pad=12)
+        ax1.set_title(f"KC Coffee 'C' · {interval_minutes}-Minute Smooth Intraday Curve & Calendar Spreads", fontsize=13, fontweight="bold", color="#ffffff", pad=12)
 
         # --- SUBPLOT 2: Spreads ---
-        ax2.plot(df["dt"], df["spread_zh"], color=c_zh, linewidth=2.4, label="Z26 / H27 Spread", marker="s", markersize=4)
-        ax2.plot(df["dt"], df["spread_hk"], color=c_hk, linewidth=2.0, label="H27 / K27 Spread", marker="^", markersize=4)
+        if can_smooth:
+            try:
+                from scipy.interpolate import PchipInterpolator
+                y_smooth_zh = PchipInterpolator(x_pts, df["spread_zh"])(x_smooth)
+                y_smooth_hk = PchipInterpolator(x_pts, df["spread_hk"])(x_smooth)
+
+                ax2.plot(x_smooth_dt, y_smooth_zh, color=c_zh, linewidth=2.4, label="Z26 / H27 Spread", zorder=3)
+                ax2.plot(x_smooth_dt, y_smooth_hk, color=c_hk, linewidth=2.0, label="H27 / K27 Spread", zorder=3)
+                ax2.scatter(df["dt"], df["spread_zh"], color=c_zh, s=24, marker="s", zorder=4, alpha=0.95)
+                ax2.scatter(df["dt"], df["spread_hk"], color=c_hk, s=20, marker="^", zorder=4, alpha=0.95)
+
+                ax2.fill_between(x_smooth_dt, y_smooth_zh, 0, color=c_zh, alpha=0.10)
+                ax2.fill_between(x_smooth_dt, y_smooth_hk, 0, color=c_hk, alpha=0.08)
+            except Exception:
+                can_smooth = False
+
+        if not can_smooth:
+            ax2.plot(df["dt"], df["spread_zh"], color=c_zh, linewidth=2.4, label="Z26 / H27 Spread", marker="s", markersize=4)
+            ax2.plot(df["dt"], df["spread_hk"], color=c_hk, linewidth=2.0, label="H27 / K27 Spread", marker="^", markersize=4)
+            ax2.fill_between(df["dt"], df["spread_zh"], 0, color=c_zh, alpha=0.10)
+            ax2.fill_between(df["dt"], df["spread_hk"], 0, color=c_hk, alpha=0.08)
 
         # Zero reference line
         ax2.axhline(0, color="#78909c", linestyle=":", linewidth=1.0, alpha=0.8)
-
-        # Subtle shading between spread and zero for visual depth
-        ax2.fill_between(df["dt"], df["spread_zh"], 0, color=c_zh, alpha=0.10)
-        ax2.fill_between(df["dt"], df["spread_hk"], 0, color=c_hk, alpha=0.08)
 
         # Annotate latest spread on ax2
         ax2.annotate(
@@ -361,11 +422,11 @@ def generate_intraday_5m_chart(
 
         ax2.set_ylabel("Spread (¢/lb)", fontsize=10.5, color="#e0e0e0", labelpad=8)
         ax2.grid(True, color=grid_color, linestyle="--", linewidth=0.7, alpha=0.8)
-        ax2.legend(loc="upper left", framealpha=0.8, facecolor=bg_color, edgecolor=grid_color, fontsize=9.5)
+        ax2.legend(loc="upper left", framealpha=0.85, facecolor=bg_color, edgecolor=grid_color, fontsize=9.5)
 
         # X-axis time formatting
         ax2.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M ET"))
-        ax2.set_xlabel("Time (America/New_York)", fontsize=10, color="#bdbdbd", labelpad=8)
+        ax2.set_xlabel(f"Time (America/New_York) · {interval_minutes}m Intervals", fontsize=10, color="#bdbdbd", labelpad=8)
 
         # Expand x-limits to fit right edge labels cleanly
         time_span = (df["dt"].iloc[-1] - df["dt"].iloc[0]).total_seconds()
@@ -374,7 +435,7 @@ def generate_intraday_5m_chart(
 
         # Bottom watermark/source
         last_time_str = latest["dt"].strftime("%b %d, %Y · %H:%M ET")
-        footer_parts = [f"CQG Live Feed · {last_time_str}"]
+        footer_parts = [f"CQG Live Feed · {interval_minutes}m Resampled · {last_time_str}"]
         if pdh is not None and pdl is not None and pdh > 0 and pdl > 0:
             footer_parts.append(f"Prev Day High/Low: {pdh:.2f} / {pdl:.2f}¢")
         fig.text(0.98, 0.015, " · ".join(footer_parts), fontsize=8.5, color="#78909c", ha="right", va="bottom")
@@ -384,12 +445,16 @@ def generate_intraday_5m_chart(
         fig.savefig(out_img, facecolor=fig.get_facecolor(), edgecolor="none", dpi=160, bbox_inches="tight")
         plt.close(fig)
 
-        logger.info(f"Generated 5-minute price line chart at {out_img}")
+        logger.info(f"Generated {interval_minutes}-minute smooth price line chart at {out_img}")
         return out_img
     except Exception as e:
-        logger.error(f"Error generating intraday 5m chart: {e}")
+        logger.error(f"Error generating intraday chart: {e}")
         try:
             plt.close("all")
         except Exception:
             pass
         return None
+
+
+generate_intraday_chart = generate_intraday_5m_chart
+

@@ -187,12 +187,16 @@ def run_telegram_update(force: bool = False, z_price: float | None = None,
     return success, res_str
 
 
+_PROCESSED_CALLBACK_IDS: set[str] = set()
+
+
 def process_telegram_callbacks(offset: int | None = None) -> int:
     """Check Telegram for incoming callback_query taps or commands and handle them.
 
     Returns:
         Next offset integer.
     """
+    global _PROCESSED_CALLBACK_IDS
     from kcquant.notify import get_telegram_updates, answer_telegram_callback
     from kcquant.orders import (
         place_paper_order,
@@ -212,10 +216,14 @@ def process_telegram_callbacks(offset: int | None = None) -> int:
         cb = u.get("callback_query")
         if cb:
             cb_id = cb.get("id")
+            if cb_id in _PROCESSED_CALLBACK_IDS:
+                continue
+            _PROCESSED_CALLBACK_IDS.add(cb_id)
+
             data = cb.get("data", "")
             chat_id = cb.get("message", {}).get("chat", {}).get("id")
 
-            # Expected data format: "ord:BUY:KCZ26:MKT:306.85" or "ord:SELL:KCH27:LMT:290.00"
+            # Expected data format: "ord:BUY:KCZ26:MKT" or "ord:SELL:KCH27:LMT:290.00"
             if data.startswith("ord:"):
                 parts = data.split(":")
                 if len(parts) >= 4:
@@ -317,6 +325,13 @@ def main():
 
     if args.listen:
         print("[*] Starting dedicated interactive Telegram order listener...")
+        print("[*] Pre-warming CQG Desktop live session for instant sub-second execution...")
+        try:
+            from kcquant.cqg import get_warm_cqg_driver
+            get_warm_cqg_driver()
+            print("[*] CQG Desktop live session ready! Sub-second execution enabled.")
+        except Exception as e:
+            print(f"[!] Notice: CQG pre-warm skipped ({e}). Will use fallback.")
         print("    Waiting for quick order button taps from Telegram (Press Ctrl+C to stop)...")
         offset = 0
         while True:

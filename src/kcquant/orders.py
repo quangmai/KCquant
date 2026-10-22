@@ -91,7 +91,7 @@ def place_paper_order(
         except Exception:
             quote = None
 
-        if quote:
+        if quote and float(quote.get("price", 0.0)) > 0:
             trade_px = float(quote.get("price", 0.0))
             bid_px = float(quote.get("bid", trade_px))
             ask_px = float(quote.get("ask", trade_px))
@@ -104,16 +104,24 @@ def place_paper_order(
                 fill_price = bid_px if bid_px > 0 else trade_px
                 fill_side = "Bid"
         else:
-            fill_price = round(target_price or 305.0, 2)
+            # Fallback to freshest known market price from monitor cache / curve history
+            try:
+                from kcquant.quotes import get_latest_kc_curve_prices
+                latest_data = get_latest_kc_curve_prices(prefer_live=True)
+                fill_price = float(latest_data.get(contract.lower(), 310.20))
+                source_label = latest_data.get("price_source", "Market Cache")
+            except Exception:
+                fill_price = 310.20
+                source_label = "Market Baseline"
             bid_px = fill_price
             ask_px = fill_price
     elif order_type == "LIMIT":
-        fill_price = round(target_price or live_price or 305.0, 2)
+        fill_price = round(target_price or live_price or 310.20, 2)
         bid_px = fill_price
         ask_px = fill_price
         fill_side = "Limit"
     else:
-        fill_price = round(live_price or target_price or 305.0, 2)
+        fill_price = round(live_price or target_price or 310.20, 2)
         bid_px = fill_price
         ask_px = fill_price
 

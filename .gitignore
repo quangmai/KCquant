@@ -17,6 +17,9 @@ data/raw/
 
 # Runtime monitor logs and temporary outputs
 output/monitor/*.log
+output/monitor/*.json
+output/monitor/*.jsonl
+output/monitor/*.csv
 output/*.parquet
 
 # IDE / Editor files

@@ -254,36 +254,55 @@ def process_telegram_callbacks(offset: int | None = None) -> int:
                     send_telegram_message(receipt_html, chat_id=chat_id)
                     print(f"[*] Executed Paper Order: {side} 1 {contract} {ord_type} @ {order_record['fill_price']:.2f}¢ ({order_record['order_id']})")
 
-        # 2. Handle Text Commands (/positions, /orders)
+        # 2. Handle Text Commands (/position, /positions, /pos, /orders, /history)
         msg = u.get("message")
         if msg:
             text = (msg.get("text") or "").strip().lower()
             chat_id = msg.get("chat", {}).get("id")
-            if text in ["/position", "/positions"]:
+            if text in ["/position", "/positions", "/pos", "/p"]:
+                from kcquant.orders import (
+                    update_portfolio_with_cqg_quotes,
+                    format_portfolio_position_html,
+                    build_quick_order_keyboard,
+                )
                 out_dir = get_orders_dir()
                 pos_file = out_dir / "positions.json"
                 orders_file = out_dir / "paper_orders.jsonl"
-                pos = update_positions_from_log(orders_file, pos_file)
+                pos, quotes = update_portfolio_with_cqg_quotes(orders_file, pos_file)
+                pos_msg = format_portfolio_position_html(pos, quotes)
+                send_telegram_message(pos_msg, reply_markup=build_quick_order_keyboard(), chat_id=chat_id)
+                print(f"[*] Handled {text} command: Net P&L ${pos.get('realized_pnl_usd', 0.0) + pos.get('unrealized_pnl_usd', 0.0):+,.2f}")
 
-                pos_lines = []
-                for c, p in pos.get("positions", {}).items():
-                    net = p.get("net_qty", 0)
-                    if net != 0:
-                        pos_lines.append(f"• <b>{c}:</b> {net:+d} @ {p.get('avg_price_cents', 0.0):.2f}¢ (Unrealized: ${p.get('unrealized_pnl_usd', 0.0):+,.2f})")
-
-                if not pos_lines:
-                    pos_lines.append("• No open positions (FLAT)")
-
-                pos_msg = (
-                    "📊 <b>KCquant Paper Portfolio Snapshot:</b>\n"
-                    "━━━━━━━━━━━━━━━━━━━━\n"
-                    + "\n".join(pos_lines) + "\n"
-                    f"━━━━━━━━━━━━━━━━━━━━\n"
-                    f"• <b>Total Realized PnL:</b> <code>${pos.get('realized_pnl_usd', 0.0):+,.2f}</code>\n"
-                    f"• <b>Total Unrealized:</b> <code>${pos.get('unrealized_pnl_usd', 0.0):+,.2f}</code>\n"
-                    f"• <b>Total Orders Filled:</b> <code>{pos.get('total_orders', 0)}</code>"
-                )
-                send_telegram_message(pos_msg, chat_id=chat_id)
+            elif text in ["/order", "/orders", "/history"]:
+                from kcquant.orders import build_quick_order_keyboard
+                out_dir = get_orders_dir()
+                orders_file = out_dir / "paper_orders.jsonl"
+                recent_orders = []
+                if orders_file.exists():
+                    with open(orders_file) as f:
+                        for line in f:
+                            if line.strip():
+                                try:
+                                    recent_orders.append(json.loads(line))
+                                except Exception:
+                                    pass
+                recent_orders = recent_orders[-5:]
+                if recent_orders:
+                    order_lines = []
+                    for o in reversed(recent_orders):
+                        s_icon = "🟢" if o.get("side") == "BUY" else "🔴"
+                        order_lines.append(
+                            f"{s_icon} <b>{o.get('side')} {o.get('qty')} {o.get('contract')}</b> @ <code>{o.get('fill_price', 0.0):.2f}¢</code>\n"
+                            f"   └ <i>{o.get('datetime_ny', '')} · {o.get('order_id', '')}</i>"
+                        )
+                    ord_msg = (
+                        "📋 <b>Recent Paper Orders:</b>\n"
+                        "━━━━━━━━━━━━━━━━━━━━\n"
+                        + "\n".join(order_lines)
+                    )
+                else:
+                    ord_msg = "📋 No orders recorded yet."
+                send_telegram_message(ord_msg, reply_markup=build_quick_order_keyboard(), chat_id=chat_id)
 
     return next_offset
 
@@ -292,6 +311,7 @@ def main():
     load_env()
     ap = argparse.ArgumentParser(description="KC Coffee 'C' Market & Physical Inventory Telegram Bot")
     ap.add_argument("--test", action="store_true", help="Send a verification test message to Telegram and exit")
+    ap.add_argument("--positions", "--position", dest="positions", action="store_true", help="Query live CQG prices, calculate unrealized P&L, and send snapshot to Telegram")
     ap.add_argument("--force", action="store_true", help="Force send message even if market is closed")
     ap.add_argument("--daemon", action="store_true", help="Run continuously in background, checking every 15 minutes and listening for quick orders")
     ap.add_argument("--listen", action="store_true", help="Run in dedicated interactive listener mode to process Telegram order taps")
@@ -322,6 +342,28 @@ def main():
         else:
             print(f"❌ Failed to send Telegram message: {res}")
             sys.exit(1)
+
+    if args.positions:
+        print("[*] Fetching live CQG quotes and calculating Unrealized P&L...")
+        from kcquant.orders import (
+            update_portfolio_with_cqg_quotes,
+            format_portfolio_position_html,
+            build_quick_order_keyboard
+        )
+        pos, quotes = update_portfolio_with_cqg_quotes()
+        html = format_portfolio_position_html(pos, quotes)
+        clean_text = (
+            html.replace("<b>", "").replace("</b>", "")
+            .replace("<code>", "").replace("</code>", "")
+            .replace("<i>", "").replace("</i>", "")
+        )
+        print("\n" + clean_text + "\n")
+        ok, res = send_telegram_message(html, reply_markup=build_quick_order_keyboard())
+        if ok:
+            print("✅ Position snapshot with live CQG P&L successfully delivered to Telegram!")
+        else:
+            print(f"❌ Failed to send position snapshot: {res}")
+        sys.exit(0)
 
     if args.listen:
         print("[*] Starting dedicated interactive Telegram order listener...")

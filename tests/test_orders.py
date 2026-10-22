@@ -88,3 +88,54 @@ def test_format_order_confirmation_html():
     assert "BUY 1 KCZ26" in html
     assert "306.85¢" in html
     assert "ORD-20261022-TEST01" in html
+
+
+def test_format_portfolio_position_html():
+    from kcquant.orders import format_portfolio_position_html
+
+    pos = {
+        "positions": {
+            "KCZ26": {
+                "net_qty": -1,
+                "side": "SHORT",
+                "avg_price_cents": 310.60,
+                "current_price_cents": 309.80,
+                "realized_pnl_usd": 1181.25,
+                "unrealized_pnl_usd": 300.00,
+            }
+        },
+        "realized_pnl_usd": 1181.25,
+        "unrealized_pnl_usd": 300.00,
+        "total_orders": 21,
+    }
+    quotes = {
+        "KCZ26": {
+            "price": 309.80,
+            "bid": 309.70,
+            "ask": 309.80,
+            "source": "CQG Desktop (Live)",
+        }
+    }
+    html = format_portfolio_position_html(pos, quotes)
+    assert "Portfolio & Real-Time P&L" in html
+    assert "SHORT <b>1</b>" in html
+    assert "310.60¢" in html
+    assert "309.80¢" in html
+    assert "+$300.00" in html
+    assert "+$1,181.25" in html
+    assert "+$1,481.25" in html  # Net Combined P&L
+
+
+def test_format_portfolio_position_html_flat():
+    from kcquant.orders import format_portfolio_position_html
+
+    pos = {
+        "positions": {},
+        "realized_pnl_usd": 500.00,
+        "unrealized_pnl_usd": 0.0,
+        "total_orders": 4,
+    }
+    html = format_portfolio_position_html(pos, {})
+    assert "FLAT (No open contracts)" in html
+    assert "+$500.00" in html
+

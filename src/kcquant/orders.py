@@ -323,3 +323,113 @@ def format_order_confirmation_html(order: dict, pos: dict | None = None) -> str:
         f"• Unrealized PnL: <code>{u_pnl_sign}</code>\n"
         f"• Total Realized: <code>${pos.get('realized_pnl_usd', 0.0):+,.2f}</code>"
     )
+
+
+def format_portfolio_position_html(pos: dict, quote_details: dict | None = None) -> str:
+    """Format Telegram HTML message displaying open positions, CQG live prices, and unrealized/realized P&L."""
+    quotes = quote_details or {}
+    pos_lines = []
+
+    for c, p in pos.get("positions", {}).items():
+        net = p.get("net_qty", 0)
+        if net != 0:
+            side_tag = "🟢 LONG" if net > 0 else "🔴 SHORT"
+            avg_px = p.get("avg_price_cents", 0.0)
+            cur_px = p.get("current_price_cents", avg_px)
+
+            # Price delta in cents (positive = in trader's favor)
+            diff_cents = (cur_px - avg_px) if net > 0 else (avg_px - cur_px)
+            diff_str = f"{diff_cents:+.2f}¢"
+
+            u_pnl = p.get("unrealized_pnl_usd", 0.0)
+            u_pnl_str = f"+${u_pnl:,.2f}" if u_pnl >= 0 else f"-${abs(u_pnl):,.2f}"
+            u_icon = "🟢" if u_pnl >= 0 else "🔴"
+
+            q = quotes.get(c, {})
+            bid = float(q.get("bid", 0.0))
+            ask = float(q.get("ask", 0.0))
+            ba_str = f" · <i>B/A: {bid:.2f}/{ask:.2f}¢</i>" if (bid > 0 and ask > 0) else ""
+
+            pos_lines.append(
+                f"• <b>{c}:</b> {side_tag} <b>{abs(net)}</b>\n"
+                f"   ├ Entry: <code>{avg_px:.2f}¢</code>\n"
+                f"   ├ CQG Live: <code>{cur_px:.2f}¢</code>{ba_str}\n"
+                f"   └ Unrealized P&L: {u_icon} <b>{u_pnl_str}</b> <i>({diff_str})</i>"
+            )
+
+    if not pos_lines:
+        kcz26_q = quotes.get("KCZ26", {})
+        live_px = float(kcz26_q.get("price", 0.0))
+        px_line = f"\n• <b>KCZ26 Market:</b> <code>{live_px:.2f}¢</code> <i>(CQG Live)</i>" if live_px > 0 else ""
+        pos_lines.append(f"• <b>Status:</b> FLAT (No open contracts){px_line}")
+
+    total_u = pos.get("unrealized_pnl_usd", 0.0)
+    total_r = pos.get("realized_pnl_usd", 0.0)
+    net_pnl = total_r + total_u
+
+    u_str = f"+${total_u:,.2f}" if total_u >= 0 else f"-${abs(total_u):,.2f}"
+    r_str = f"+${total_r:,.2f}" if total_r >= 0 else f"-${abs(total_r):,.2f}"
+    net_str = f"+${net_pnl:,.2f}" if net_pnl >= 0 else f"-${abs(net_pnl):,.2f}"
+    net_icon = "🟢" if net_pnl >= 0 else "🔴"
+
+    source_tag = "CQG Desktop (Live)"
+    for q in quotes.values():
+        if q and q.get("source"):
+            source_tag = q.get("source")
+            break
+    time_str = datetime.now(NY_TZ).strftime("%H:%M:%S ET")
+
+    return (
+        "📊 <b>KCquant Portfolio & Real-Time P&L:</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        + "\n\n".join(pos_lines) + "\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"• <b>Total Unrealized:</b> <code>{u_str}</code>\n"
+        f"• <b>Total Realized:</b> <code>{r_str}</code>\n"
+        f"• <b>Net Combined P&L:</b> {net_icon} <code>{net_str}</code>\n"
+        f"• <b>Total Orders Filled:</b> <code>{pos.get('total_orders', 0)}</code>\n"
+        f"• <b>Price Source:</b> <code>{source_tag} · {time_str}</code>"
+    )
+
+
+def update_portfolio_with_cqg_quotes(
+    orders_file: Path | None = None,
+    pos_file: Path | None = None,
+) -> tuple[dict, dict]:
+    """Fetch live CQG quotes for all active contracts and calculate unrealized P&L.
+
+    Returns:
+        (updated_positions_dict, quotes_dict)
+    """
+    out_dir = orders_file.parent if orders_file else get_orders_dir()
+    pos_file = pos_file or (out_dir / "positions.json")
+    orders_file = orders_file or (out_dir / "paper_orders.jsonl")
+
+    # Rebuild base inventory
+    pos = update_positions_from_log(orders_file, pos_file)
+
+    active_contracts = set(c for c, p in pos.get("positions", {}).items() if p.get("net_qty", 0) != 0)
+    if not active_contracts:
+        active_contracts = {"KCZ26"}
+
+    live_prices: dict[str, float] = {}
+    quotes_data: dict[str, dict] = {}
+
+    try:
+        from kcquant.cqg import fetch_instant_cqg_quote
+        for c in active_contracts:
+            try:
+                q = fetch_instant_cqg_quote(c)
+                if q and float(q.get("price", 0.0)) > 0:
+                    live_prices[c] = float(q.get("price"))
+                    quotes_data[c] = q
+            except Exception as e:
+                logger.warning(f"Error fetching CQG quote for {c}: {e}")
+    except Exception as e:
+        logger.warning(f"Error importing or accessing CQG quote provider: {e}")
+
+    if live_prices:
+        pos = update_positions_from_log(orders_file, pos_file, live_prices=live_prices)
+
+    return pos, quotes_data
+

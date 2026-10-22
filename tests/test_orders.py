@@ -14,24 +14,19 @@ from kcquant.orders import (
 
 
 def test_build_quick_order_keyboard():
-    kb = build_quick_order_keyboard(kcz26_price=306.85, kch27_price=293.00)
+    kb = build_quick_order_keyboard(kcz26_price=306.85)
     assert "inline_keyboard" in kb
     rows = kb["inline_keyboard"]
-    assert len(rows) == 2
+    assert len(rows) == 1
     assert len(rows[0]) == 2
-    assert len(rows[1]) == 2
 
     # Check button text
     assert "BUY 1 KC Z26 Market" in rows[0][0]["text"]
-    assert "BUY 1 KC H27 Limit (290.00¢)" in rows[0][1]["text"]
-    assert "SELL 1 KC Z26 Market" in rows[1][0]["text"]
-    assert "SELL 1 KC H27 Limit (290.00¢)" in rows[1][1]["text"]
+    assert "SELL 1 KC Z26 Market" in rows[0][1]["text"]
 
     # Check callback_data
     assert rows[0][0]["callback_data"] == "ord:BUY:KCZ26:MKT:306.85"
-    assert rows[0][1]["callback_data"] == "ord:BUY:KCH27:LMT:290.00"
-    assert rows[1][0]["callback_data"] == "ord:SELL:KCZ26:MKT:306.85"
-    assert rows[1][1]["callback_data"] == "ord:SELL:KCH27:LMT:290.00"
+    assert rows[0][1]["callback_data"] == "ord:SELL:KCZ26:MKT:306.85"
 
 
 def test_place_paper_order_and_position_tracking(tmp_path):

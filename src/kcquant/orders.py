@@ -33,9 +33,8 @@ def get_orders_dir() -> Path:
     return d
 
 
-def build_quick_order_keyboard(kcz26_price: float, kch27_price: float) -> dict:
-    """Build the 4 quick tap order buttons requested by user."""
-    h_lmt = round(kch27_price - 3.0, 2)
+def build_quick_order_keyboard(kcz26_price: float, kch27_price: float | None = None) -> dict:
+    """Build the quick tap Market order buttons."""
     return {
         "inline_keyboard": [
             [
@@ -44,18 +43,8 @@ def build_quick_order_keyboard(kcz26_price: float, kch27_price: float) -> dict:
                     "callback_data": f"ord:BUY:KCZ26:MKT:{kcz26_price:.2f}"
                 },
                 {
-                    "text": f"🔵 BUY 1 KC H27 Limit ({h_lmt:.2f}¢)",
-                    "callback_data": f"ord:BUY:KCH27:LMT:{h_lmt:.2f}"
-                }
-            ],
-            [
-                {
                     "text": "🔴 SELL 1 KC Z26 Market",
                     "callback_data": f"ord:SELL:KCZ26:MKT:{kcz26_price:.2f}"
-                },
-                {
-                    "text": f"🟠 SELL 1 KC H27 Limit ({h_lmt:.2f}¢)",
-                    "callback_data": f"ord:SELL:KCH27:LMT:{h_lmt:.2f}"
                 }
             ]
         ]

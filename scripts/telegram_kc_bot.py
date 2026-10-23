@@ -206,8 +206,28 @@ def run_telegram_update(force: bool = False, z_price: float | None = None,
         }
         f.write(json.dumps(log_entry) + "\n")
 
+    sync_state_to_git("Auto-sync 15m monitor history and positions [skip ci]")
 
     return success, res_str
+
+
+def sync_state_to_git(commit_message: str) -> None:
+    """Commit and push orders/monitor state if running in GitHub Actions or a configured git repo."""
+    try:
+        import subprocess
+        res = subprocess.run(
+            ["git", "status", "--porcelain", "output/orders", "output/monitor"],
+            capture_output=True, text=True, cwd=str(ROOT)
+        )
+        if res.stdout.strip():
+            subprocess.run(["git", "config", "user.name", "github-actions[bot]"], cwd=str(ROOT), check=False)
+            subprocess.run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"], cwd=str(ROOT), check=False)
+            subprocess.run(["git", "add", "output/orders/", "output/monitor/"], cwd=str(ROOT), check=False)
+            subprocess.run(["git", "commit", "-m", commit_message], cwd=str(ROOT), check=False)
+            subprocess.run(["git", "pull", "--rebase", "origin", "main"], cwd=str(ROOT), check=False)
+            subprocess.run(["git", "push", "origin", "main"], cwd=str(ROOT), check=False)
+    except Exception as e:
+        print(f"[!] Git sync notice: {e}")
 
 
 _PROCESSED_CALLBACK_IDS: set[str] = set()
@@ -215,6 +235,7 @@ _PROCESSED_CALLBACK_IDS: set[str] = set()
 
 def process_telegram_callbacks(offset: int | None = None) -> int:
     """Check Telegram for incoming callback_query taps or commands and handle them.
+
 
     Returns:
         Next offset integer.
@@ -276,6 +297,7 @@ def process_telegram_callbacks(offset: int | None = None) -> int:
                     receipt_html = format_order_confirmation_html(order_record, positions)
                     send_telegram_message(receipt_html, chat_id=chat_id)
                     print(f"[*] Executed Paper Order: {side} 1 {contract} {ord_type} @ {order_record['fill_price']:.2f}¢ ({order_record['order_id']})")
+                    sync_state_to_git(f"Auto-sync paper order {order_record['order_id']} [skip ci]")
 
         # 2. Handle Text Commands (/position, /positions, /pos, /orders, /history)
         msg = u.get("message")
@@ -346,6 +368,7 @@ def main():
     ap.add_argument("--no-download", action="store_true", help="Skip ICE report download")
     ap.add_argument("--samples", type=int, default=1, help="Number of samples to record in this run (default: 1)")
     ap.add_argument("--sample-interval", type=int, default=300, help="Interval between samples in seconds (default: 300 [5m])")
+    ap.add_argument("--duration", type=int, default=0, help="Max run duration in seconds for daemon (0 = run indefinitely)")
     args = ap.parse_args()
 
     if args.test:
@@ -420,7 +443,11 @@ def main():
 
 
         offset = 0
+        start_time = time.time()
         while _RUNNING:
+            if args.duration > 0 and (time.time() - start_time) >= args.duration:
+                print(f"[*] Target duration ({args.duration}s) reached. Exiting cleanly for runner handover...")
+                break
             try:
                 # 1. Listen for interactive Telegram button taps and text commands
                 offset = process_telegram_callbacks(offset)

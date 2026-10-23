@@ -1,0 +1,98 @@
+name: KC 24/7 Cloud Bot & Monitor
+
+on:
+  schedule:
+    # Watchdog cron: triggers every 5 hours (03:00, 08:00, 13:00, 18:00, 23:00 UTC) as a safety net
+    - cron: '0 3,8,13,18,23 * * *'
+  repository_dispatch:
+    types: [kc-monitor, start-bot, resume-bot]
+  workflow_dispatch:
+    inputs:
+      duration:
+        description: 'Run duration in seconds (default: 19800 [5.5 hours])'
+        required: false
+        default: '19800'
+      retrigger:
+        description: 'Automatically re-trigger next runner at handover'
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: kc-telegram-bot
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  run-cloud-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          persist-credentials: true
+
+      - name: Configure Authenticated Git Remote
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if [ -n "${{ secrets.GH_PAT }}" ]; then
+            git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/${{ github.repository }}.git
+          fi
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+
+      - name: Run 24/7 Persistent KC Cloud Bot
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          DATABENTO_API_KEY: ${{ secrets.DATABENTO_API_KEY }}
+          CQG_USERNAME: ${{ secrets.CQG_USERNAME }}
+          CQG_PASSWORD: ${{ secrets.CQG_PASSWORD }}
+          CQG_BROKER: ${{ secrets.CQG_BROKER }}
+          CQG_URL: ${{ secrets.CQG_URL }}
+        run: |
+          DURATION="${{ github.event.inputs.duration }}"
+          if [ -z "$DURATION" ]; then
+            DURATION="19800"
+          fi
+          echo "[*] Launching KC Telegram Cloud Bot Daemon (Duration: ${DURATION}s)..."
+          python scripts/telegram_kc_bot.py --daemon --duration "$DURATION"
+
+      - name: Sync Final State to Main Branch
+        if: always()
+        run: |
+          git add -f output/monitor/ output/orders/ || true
+          git commit -m "Auto-sync positions and orders at runner handover [skip ci]" || echo "No changes to commit"
+          git pull --rebase origin main || true
+          git push origin main || echo "Push skipped"
+
+      - name: Seamless Handover to Next Cloud Runner
+        if: always() && github.event.inputs.retrigger != 'false'
+        run: |
+          if [ -n "${{ secrets.GH_PAT }}" ]; then
+            echo "[*] Triggering next cloud runner handover..."
+            curl -s -X POST \
+              -H "Authorization: token ${{ secrets.GH_PAT }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              https://api.github.com/repos/${{ github.repository }}/actions/workflows/kc_cloud_bot.yml/dispatches \
+              -d '{"ref":"main"}' || echo "Dispatch notice"
+            echo "[*] Handover dispatched."
+          else
+            echo "[!] Notice: GH_PAT secret not set. Skipping auto-handover dispatch."
+          fi

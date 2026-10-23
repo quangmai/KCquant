@@ -86,6 +86,9 @@ def format_telegram_html(data: dict, is_forced: bool = False) -> str:
     """Format market prices, spreads, and certified inventory as clean Telegram HTML."""
     now_ny = datetime.now(NY_TZ)
     time_str = now_ny.strftime("%b %d, %Y · %H:%M ET")
+    quote_time = data.get("quote_time_ny") or now_ny.strftime("%H:%M:%S ET")
+    dur_ms = data.get("fetch_duration_ms")
+    dur_str = f" <i>({dur_ms}ms)</i>" if dur_ms is not None else ""
 
     banner = (
         "☕ <b>KC Monitor</b>\n"
@@ -97,7 +100,8 @@ def format_telegram_html(data: dict, is_forced: bool = False) -> str:
         f"📊 <b>KC Futures Prices:</b>\n"
         f"• KCZ26 (Dec 26): <code>{data['kcz26_price']:.2f}¢</code>\n"
         f"• KCH27 (Mar 27): <code>{data['kch27_price']:.2f}¢</code>\n"
-        f"• KCK27 (May 27): <code>{data['kck27_price']:.2f}¢</code>\n\n"
+        f"• KCK27 (May 27): <code>{data['kck27_price']:.2f}¢</code>\n"
+        f"• <b>Last Price Update:</b> <code>{quote_time}</code>{dur_str}\n\n"
     )
 
     spreads_section = (
@@ -151,6 +155,7 @@ def run_telegram_update(force: bool = False, z_price: float | None = None,
 
     result = None
     for s_idx in range(max(1, samples)):
+        t_start = time.time()
         prices = get_latest_kc_curve_prices(
             raw_file=raw_curve_file,
             z_override=z_price,
@@ -158,7 +163,9 @@ def run_telegram_update(force: bool = False, z_price: float | None = None,
             k_override=k_price,
             prefer_live=prefer_live
         )
+        fetch_dur_ms = int((time.time() - t_start) * 1000)
         result = evaluate_market_data(prices, cert_df)
+        result["fetch_duration_ms"] = fetch_dur_ms
         persist_results(result, monitor_dir)
         record_cqg_intraday_snapshot(result)
 

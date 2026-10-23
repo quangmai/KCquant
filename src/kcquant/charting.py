@@ -531,9 +531,9 @@ def generate_intraday_5m_chart(
         pad_seconds = max(300, time_span * 0.14)
         ax2.set_xlim(df["dt"].iloc[0] - timedelta(seconds=120), df["dt"].iloc[-1] + timedelta(seconds=pad_seconds))
 
-        # Bottom watermark/source
+        # Bottom footer
         last_time_str = latest["dt"].strftime("%b %d, %Y · %H:%M ET")
-        footer_parts = [f"CQG Live Feed · {interval_minutes}m Resampled · {last_time_str}"]
+        footer_parts = [f"Last Price Update: {last_time_str} · {interval_minutes}m Resampled"]
         if pdh is not None and pdl is not None and pdh > 0 and pdl > 0:
             footer_parts.append(f"Prev Day High/Low: {pdh:.2f} / {pdl:.2f}¢")
         fig.text(0.98, 0.015, " · ".join(footer_parts), fontsize=8.5, color="#78909c", ha="right", va="bottom")

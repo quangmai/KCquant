@@ -88,6 +88,8 @@ def test_format_order_confirmation_html():
     assert "BUY 1 KCZ26" in html
     assert "306.85¢" in html
     assert "ORD-20261022-TEST01" in html
+    assert "Last Price Update" in html
+    assert "Source:" not in html
 
 
 def test_format_portfolio_position_html():
@@ -114,6 +116,7 @@ def test_format_portfolio_position_html():
             "bid": 309.70,
             "ask": 309.80,
             "source": "CQG Desktop (Live)",
+            "latency_ms": 48,
         }
     }
     html = format_portfolio_position_html(pos, quotes)
@@ -124,6 +127,10 @@ def test_format_portfolio_position_html():
     assert "+$300.00" in html
     assert "+$1,181.25" in html
     assert "+$1,481.25" in html  # Net Combined P&L
+    assert "Last Price Update" in html
+    assert "48ms" in html
+    assert "Price Source" not in html
+    assert "CQG Live" not in html
 
 
 def test_format_portfolio_position_html_flat():

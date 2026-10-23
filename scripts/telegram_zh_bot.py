@@ -103,7 +103,7 @@ def format_telegram_html(data: dict, is_forced: bool = False) -> str:
         f"• KCZ26 (Dec 26): <code>{data['kcz26_price']:.2f}¢</code>\n"
         f"• KCH27 (Mar 27): <code>{data['kch27_price']:.2f}¢</code>\n"
         f"• <b>Z/H Calendar Spread:</b> <code>+{data['spread_zh_cents']:.2f}¢</code>\n"
-        f"• <b>Source:</b> <i>{data.get('price_source', 'Live Quote')}</i>\n"
+        f"• <b>Last Price Update:</b> <code>{data.get('quote_time_ny', 'N/A')}</code>\n"
         f"• <b>Unrealized P&L:</b> <code>{'+' if data['unrealized_pnl_usd'] >= 0 else ''}${data['unrealized_pnl_usd']:,.2f}</code> per contract\n\n"
         f"🎯 <b>Strategy Milestones:</b>\n"
         f"• Take-Profit (+2.00¢): <code>{data['distance_to_take_profit_cents']:+.2f}¢ to target</code>\n"

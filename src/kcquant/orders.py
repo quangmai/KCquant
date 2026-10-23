@@ -300,7 +300,6 @@ def format_order_confirmation_html(order: dict, pos: dict | None = None) -> str:
     fill_side_str = f" ({fill_side})" if fill_side else ""
     bid = order.get("bid", 0.0)
     ask = order.get("ask", 0.0)
-    source = order.get("source", "CQG Desktop (Live)")
     latency = order.get("latency_ms")
 
     ba_line = f"• <b>Market B/A:</b> <code>{bid:.2f} / {ask:.2f}¢</code>\n" if (bid > 0 and ask > 0) else ""
@@ -313,10 +312,9 @@ def format_order_confirmation_html(order: dict, pos: dict | None = None) -> str:
         f"• <b>Type:</b> <code>{order_type}</code>\n"
         f"• <b>Fill Price:</b> <code>{fill_px:.2f}¢</code>{fill_side_str}\n"
         + ba_line +
-        f"• <b>Source:</b> <code>{source}</code>{latency_str}\n"
+        f"• <b>Last Price Update:</b> <code>{time_str}</code>{latency_str}\n"
         f"• <b>Notional:</b> <code>${order.get('notional_usd', 0.0):,.2f}</code>\n"
         f"• <b>Order ID:</b> <code>{order_id}</code>\n"
-        f"• <b>Time:</b> <i>{time_str}</i>\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"📊 <b>Position Snapshot:</b>\n"
         f"• Net {contract}: <b>{pos_desc}</b> (Avg: {avg_px:.2f}¢)\n"
@@ -326,8 +324,9 @@ def format_order_confirmation_html(order: dict, pos: dict | None = None) -> str:
 
 
 def format_portfolio_position_html(pos: dict, quote_details: dict | None = None) -> str:
-    """Format Telegram HTML message displaying open positions, CQG live prices, and unrealized/realized P&L."""
+    """Format Telegram HTML message displaying open positions, live prices, and unrealized/realized P&L."""
     quotes = quote_details or {}
+    meta = quotes.get("_meta", {})
     pos_lines = []
 
     for c, p in pos.get("positions", {}).items():
@@ -353,14 +352,14 @@ def format_portfolio_position_html(pos: dict, quote_details: dict | None = None)
             pos_lines.append(
                 f"• <b>{c}:</b> {side_tag} <b>{abs(net)}</b>\n"
                 f"   ├ Entry: <code>{avg_px:.2f}¢</code>\n"
-                f"   ├ CQG Live: <code>{cur_px:.2f}¢</code>{ba_str}\n"
+                f"   ├ Live Price: <code>{cur_px:.2f}¢</code>{ba_str}\n"
                 f"   └ Unrealized P&L: {u_icon} <b>{u_pnl_str}</b> <i>({diff_str})</i>"
             )
 
     if not pos_lines:
         kcz26_q = quotes.get("KCZ26", {})
         live_px = float(kcz26_q.get("price", 0.0))
-        px_line = f"\n• <b>KCZ26 Market:</b> <code>{live_px:.2f}¢</code> <i>(CQG Live)</i>" if live_px > 0 else ""
+        px_line = f"\n• <b>KCZ26 Market:</b> <code>{live_px:.2f}¢</code>" if live_px > 0 else ""
         pos_lines.append(f"• <b>Status:</b> FLAT (No open contracts){px_line}")
 
     total_u = pos.get("unrealized_pnl_usd", 0.0)
@@ -372,12 +371,17 @@ def format_portfolio_position_html(pos: dict, quote_details: dict | None = None)
     net_str = f"+${net_pnl:,.2f}" if net_pnl >= 0 else f"-${abs(net_pnl):,.2f}"
     net_icon = "🟢" if net_pnl >= 0 else "🔴"
 
-    source_tag = "CQG Desktop (Live)"
-    for q in quotes.values():
-        if q and q.get("source"):
-            source_tag = q.get("source")
-            break
-    time_str = datetime.now(NY_TZ).strftime("%H:%M:%S ET")
+    now_ny = datetime.now(NY_TZ)
+    time_str = meta.get("time_ny") or now_ny.strftime("%H:%M:%S ET")
+
+    # Duration/latency formatted cleanly
+    dur_ms = meta.get("duration_ms")
+    if dur_ms is None:
+        for q in quotes.values():
+            if isinstance(q, dict) and q.get("latency_ms"):
+                dur_ms = q["latency_ms"]
+                break
+    dur_str = f" <i>({dur_ms}ms)</i>" if dur_ms is not None else ""
 
     return (
         "📊 <b>KCquant Portfolio & Real-Time P&L:</b>\n"
@@ -388,7 +392,7 @@ def format_portfolio_position_html(pos: dict, quote_details: dict | None = None)
         f"• <b>Total Realized:</b> <code>{r_str}</code>\n"
         f"• <b>Net Combined P&L:</b> {net_icon} <code>{net_str}</code>\n"
         f"• <b>Total Orders Filled:</b> <code>{pos.get('total_orders', 0)}</code>\n"
-        f"• <b>Price Source:</b> <code>{source_tag} · {time_str}</code>"
+        f"• <b>Last Price Update:</b> <code>{time_str}</code>{dur_str}"
     )
 
 
@@ -396,11 +400,13 @@ def update_portfolio_with_cqg_quotes(
     orders_file: Path | None = None,
     pos_file: Path | None = None,
 ) -> tuple[dict, dict]:
-    """Fetch live CQG quotes for all active contracts and calculate unrealized P&L.
+    """Fetch live quotes for all active contracts and calculate unrealized P&L.
 
     Returns:
         (updated_positions_dict, quotes_dict)
     """
+    import time
+    t_start = time.time()
     out_dir = orders_file.parent if orders_file else get_orders_dir()
     pos_file = pos_file or (out_dir / "positions.json")
     orders_file = orders_file or (out_dir / "paper_orders.jsonl")
@@ -424,12 +430,20 @@ def update_portfolio_with_cqg_quotes(
                     live_prices[c] = float(q.get("price"))
                     quotes_data[c] = q
             except Exception as e:
-                logger.warning(f"Error fetching CQG quote for {c}: {e}")
+                logger.warning(f"Error fetching quote for {c}: {e}")
     except Exception as e:
-        logger.warning(f"Error importing or accessing CQG quote provider: {e}")
+        logger.warning(f"Error accessing quote provider: {e}")
 
     if live_prices:
         pos = update_positions_from_log(orders_file, pos_file, live_prices=live_prices)
 
+    duration_ms = int((time.time() - t_start) * 1000)
+    now_ny = datetime.now(NY_TZ)
+    quotes_data["_meta"] = {
+        "duration_ms": duration_ms,
+        "time_ny": now_ny.strftime("%H:%M:%S ET")
+    }
+
     return pos, quotes_data
+
 

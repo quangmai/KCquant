@@ -176,12 +176,17 @@ def persist_results(data: dict, out_dir: Path):
     with open(json_path, "w") as f:
         json.dump(data, f, indent=2)
 
-    # Append to CSV
+    # Append to CSV safely aligning columns
     row_df = pd.DataFrame([data])
     if csv_path.exists():
-        history = pd.read_csv(csv_path)
-        if not (history["as_of_report_date"] == data["as_of_report_date"]).any():
-            row_df.to_csv(csv_path, mode="a", header=False, index=False)
+        try:
+            history = pd.read_csv(csv_path)
+            if "as_of_report_date" in history.columns and not (history["as_of_report_date"] == data.get("as_of_report_date")).any():
+                combined = pd.concat([history, row_df], ignore_index=True)
+                combined.to_csv(csv_path, index=False)
+        except Exception:
+            # Fallback if CSV was somehow malformed
+            row_df.to_csv(csv_path, index=False)
     else:
         row_df.to_csv(csv_path, index=False)
 

@@ -58,11 +58,11 @@ def test_get_prev_day_range_fallback():
         assert res["high"] >= res["low"]
 
 
-def test_get_prev_day_range_yahoo():
+def test_get_prev_day_range_yahoo(tmp_path):
     mock_payload = {
         "chart": {
             "result": [{
-                "timestamp": [1792468800, 1792555200],  # 2 days
+                "timestamp": [1792468800, 1792555200],  # 2026-10-20, 2026-10-21
                 "indicators": {
                     "quote": [{
                         "high": [318.20, 317.90],
@@ -73,16 +73,18 @@ def test_get_prev_day_range_yahoo():
             }]
         }
     }
-    with patch("requests.get") as mock_get:
+    with patch("requests.get") as mock_get, patch("kcquant.charting.ROOT", tmp_path):
         mock_resp = MagicMock()
         mock_resp.status_code = 200
         mock_resp.json.return_value = mock_payload
         mock_get.return_value = mock_resp
 
-        res = get_prev_day_range("KCZ26")
+        res = get_prev_day_range("KCZ26", target_date="2026-10-22")
         assert res is not None
+        assert res["date"] == "2026-10-21"
         assert res["high"] == 317.90
         assert res["low"] == 308.35
+
 
 
 def test_generate_intraday_5m_chart(tmp_path):
@@ -169,3 +171,31 @@ def test_send_telegram_photo_missing_token(tmp_path, monkeypatch):
     ok, msg = send_telegram_photo(fake_img, token="", chat_id="")
     assert ok is False
     assert "Missing" in msg
+
+
+def test_daily_chart_isolates_new_trading_day(tmp_path):
+    csv_file = tmp_path / "mixed_intraday.csv"
+    out_img = tmp_path / "daily_chart.png"
+
+    # Yesterday: 2026-10-22, Today: 2026-10-23
+    rows = [
+        # Yesterday bars
+        {"datetime_ny": "2026-10-22 04:15", "timestamp": 1729584900, "kcz26": 315.0, "kch27": 300.0, "kck27": 295.0, "spread_zh": 15.0, "spread_hk": 5.0},
+        {"datetime_ny": "2026-10-22 10:00", "timestamp": 1729605600, "kcz26": 316.0, "kch27": 301.0, "kck27": 296.0, "spread_zh": 15.0, "spread_hk": 5.0},
+        # Today bars
+        {"datetime_ny": "2026-10-23 04:15", "timestamp": 1729671300, "kcz26": 311.0, "kch27": 296.0, "kck27": 291.5, "spread_zh": 15.0, "spread_hk": 4.5},
+        {"datetime_ny": "2026-10-23 04:30", "timestamp": 1729672200, "kcz26": 311.5, "kch27": 296.2, "kck27": 291.7, "spread_zh": 15.3, "spread_hk": 4.5},
+    ]
+    pd.DataFrame(rows).to_csv(csv_file, index=False)
+
+    img = generate_intraday_5m_chart(
+        csv_path=csv_file,
+        output_image=out_img,
+        interval_minutes=15,
+        prev_day_high=315.50,
+        prev_day_low=302.25,
+        prev_day_date="2026-10-22",
+    )
+    assert img is not None
+    assert img.exists()
+

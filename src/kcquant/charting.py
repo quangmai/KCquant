@@ -80,26 +80,36 @@ def record_cqg_intraday_snapshot(data: dict, csv_path: Path | None = None) -> Pa
     return path
 
 
-def get_prev_day_range(contract: str = "KCZ26") -> dict[str, float | str] | None:
+def get_prev_day_range(contract: str = "KCZ26", target_date: str | None = None) -> dict[str, float | str] | None:
     """Retrieve previous trading day high, low, and close for a contract (e.g. KCZ26).
 
-    Queries Yahoo Finance for daily bars, selects the latest session prior to today,
-    and caches results in output/monitor/kc_prev_day_range_{contract}.json.
+    Queries Yahoo Finance for daily bars, selects the latest session strictly prior to target_date,
+    and caches results in output/monitor/kc_prev_day_range_{contract}.json keyed by trading date.
     """
     clean_sym = contract.replace(".NYB", "").upper()
     cache_path = ROOT / "output" / "monitor" / f"kc_prev_day_range_{clean_sym.lower()}.json"
 
     now_ny = datetime.now(NY_TZ)
-    today_ny = now_ny.date()
+    if target_date:
+        try:
+            current_trading_date = datetime.strptime(target_date, "%Y-%m-%d").date()
+        except Exception:
+            current_trading_date = now_ny.date()
+    else:
+        current_trading_date = now_ny.date()
 
-    # 1. Check recent cache
+    # 1. Check recent cache: valid only if cached specifically for this current_trading_date
     if cache_path.exists():
         try:
             import json
             with open(cache_path) as f:
                 cached = json.load(f)
-            # If cached date is prior to today and high/low exist, use it
-            if cached.get("date") != str(today_ny) and "high" in cached and "low" in cached:
+            # Must match current_trading_date and the selected prev date must be strictly prior
+            if (
+                cached.get("trading_date") == str(current_trading_date)
+                and cached.get("date") != str(current_trading_date)
+                and "high" in cached and "low" in cached
+            ):
                 return cached
         except Exception:
             pass
@@ -107,7 +117,7 @@ def get_prev_day_range(contract: str = "KCZ26") -> dict[str, float | str] | None
     # 2. Query Yahoo Finance daily bars
     try:
         import requests
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{clean_sym}.NYB?interval=1d&range=5d"
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{clean_sym}.NYB?interval=1d&range=10d"
         headers = {
             "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)"
         }
@@ -130,22 +140,24 @@ def get_prev_day_range(contract: str = "KCZ26") -> dict[str, float | str] | None
                     valid_bars.append((b_date, float(h), float(l), float(c)))
 
                 if valid_bars:
-                    # Select the latest bar strictly before today
-                    prev_bars = [b for b in valid_bars if b[0] < today_ny]
-                    target = prev_bars[-1] if prev_bars else (valid_bars[-2] if len(valid_bars) >= 2 else valid_bars[-1])
-                    result = {
-                        "contract": clean_sym,
-                        "date": str(target[0]),
-                        "high": round(target[1], 2),
-                        "low": round(target[2], 2),
-                        "close": round(target[3], 2),
-                        "updated_at": now_ny.isoformat()
-                    }
-                    cache_path.parent.mkdir(parents=True, exist_ok=True)
-                    import json
-                    with open(cache_path, "w") as f:
-                        json.dump(result, f, indent=2)
-                    return result
+                    # Select the latest bar strictly before current_trading_date
+                    prev_bars = [b for b in valid_bars if b[0] < current_trading_date]
+                    if prev_bars:
+                        target = prev_bars[-1]
+                        result = {
+                            "contract": clean_sym,
+                            "trading_date": str(current_trading_date),
+                            "date": str(target[0]),
+                            "high": round(target[1], 2),
+                            "low": round(target[2], 2),
+                            "close": round(target[3], 2),
+                            "updated_at": now_ny.isoformat()
+                        }
+                        cache_path.parent.mkdir(parents=True, exist_ok=True)
+                        import json
+                        with open(cache_path, "w") as f:
+                            json.dump(result, f, indent=2)
+                        return result
     except Exception as e:
         logger.warning(f"Could not fetch previous day range from Yahoo for {clean_sym}: {e}")
 
@@ -154,19 +166,23 @@ def get_prev_day_range(contract: str = "KCZ26") -> dict[str, float | str] | None
         try:
             import json
             with open(cache_path) as f:
-                return json.load(f)
+                cached = json.load(f)
+                if "high" in cached and "low" in cached:
+                    return cached
         except Exception:
             pass
 
     # Baseline fallback for KCZ26
     return {
         "contract": clean_sym,
-        "date": "2026-10-21",
-        "high": 317.90,
-        "low": 308.35,
-        "close": 316.15,
+        "trading_date": str(current_trading_date),
+        "date": "2026-10-22",
+        "high": 315.50,
+        "low": 302.25,
+        "close": 312.45,
         "updated_at": now_ny.isoformat()
     }
+
 
 
 def backfill_intraday_session_history(csv_path: Path | None = None) -> pd.DataFrame:
@@ -300,34 +316,55 @@ def generate_intraday_5m_chart(
         if len(df_raw) == 0:
             return None
 
-        # Filter for recent trading day/session (up to last 24 hours)
-        df_raw["dt"] = pd.to_datetime(df_raw["datetime_ny"])
-        df_raw = df_raw.sort_values("dt").reset_index(drop=True)
+        # Determine target trading date (strictly isolate each date's session)
+        now_ny = datetime.now(NY_TZ)
+        today_str = now_ny.strftime("%Y-%m-%d")
+
+        today_mask = df_raw["datetime_ny"].str.startswith(today_str)
+        if today_mask.any():
+            target_date_str = today_str
+            df_day = df_raw[today_mask].copy()
+            # If today has sparse data (< 10 bars), backfill from Yahoo
+            if len(df_day) < 10:
+                df_raw = backfill_intraday_session_history(path)
+                today_mask = df_raw["datetime_ny"].str.startswith(today_str)
+                if today_mask.any():
+                    df_day = df_raw[today_mask].copy()
+        else:
+            # Pre-market or weekend: use latest trading date available in data
+            target_date_str = df_raw["datetime_ny"].iloc[-1][:10]
+            df_day = df_raw[df_raw["datetime_ny"].str.startswith(target_date_str)].copy()
+
+        df_day["dt"] = pd.to_datetime(df_day["datetime_ny"])
+        df_day = df_day.sort_values("dt").reset_index(drop=True)
+
+        if len(df_day) == 0:
+            return None
 
         # Resample to specified interval (default 15 minutes) for smooth representation
-        if interval_minutes > 5 and len(df_raw) >= 3:
+        if interval_minutes > 5 and len(df_day) >= 2:
             df = (
-                df_raw.set_index("dt")
+                df_day.set_index("dt")
                 .resample(f"{interval_minutes}min")
                 .last()
                 .dropna(subset=["kcz26"])
                 .reset_index()
             )
             # Ensure the very latest raw tick is included so live price is always current
-            if not df.empty and df_raw["dt"].iloc[-1] > df["dt"].iloc[-1]:
-                df = pd.concat([df, df_raw.iloc[[-1]]], ignore_index=True).drop_duplicates(subset=["dt"])
+            if not df.empty and df_day["dt"].iloc[-1] > df["dt"].iloc[-1]:
+                df = pd.concat([df, df_day.iloc[[-1]]], ignore_index=True).drop_duplicates(subset=["dt"])
         else:
-            df = df_raw
+            df = df_day
 
         if len(df) == 0:
             return None
 
-        # Resolve previous day high/low if not explicitly provided
+        # Resolve previous day high/low specifically for this target trading date!
         pdh = prev_day_high
         pdl = prev_day_low
         p_date = prev_day_date
         if pdh is None or pdl is None:
-            prev_info = get_prev_day_range(contract)
+            prev_info = get_prev_day_range(contract, target_date=target_date_str)
             if prev_info:
                 pdh = float(prev_info.get("high", 0.0))
                 pdl = float(prev_info.get("low", 0.0))
@@ -360,16 +397,23 @@ def generate_intraday_5m_chart(
 
         # --- SUBPLOT 1: Outrights & Previous Day High/Low ---
         # Previous Day High / Low white lines
+        p_date_badge = ""
+        if p_date:
+            try:
+                p_date_badge = f" ({datetime.strptime(p_date, '%Y-%m-%d').strftime('%b %d')})"
+            except Exception:
+                p_date_badge = f" ({p_date})"
+
         if pdh is not None and pdl is not None and pdh > 0 and pdl > 0:
             ax1.axhline(pdh, color="#ffffff", linestyle="--", linewidth=1.3, alpha=0.9, zorder=2)
             ax1.axhline(pdl, color="#ffffff", linestyle="--", linewidth=1.3, alpha=0.9, zorder=2)
             ax1.axhspan(pdl, pdh, color="#ffffff", alpha=0.035, zorder=1)
 
-            # Left inline badges for PDH and PDL
-            start_x = df["dt"].iloc[0] + timedelta(minutes=4)
+            # Left inline badges for PDH and PDL with date
+            start_x = df["dt"].iloc[0] + timedelta(minutes=2)
             ax1.text(
                 start_x, pdh + 0.35,
-                f"PREV DAY HIGH: {pdh:.2f}¢",
+                f"PREV HIGH{p_date_badge}: {pdh:.2f}¢",
                 color="#ffffff",
                 fontweight="bold",
                 fontsize=8,
@@ -379,7 +423,7 @@ def generate_intraday_5m_chart(
             )
             ax1.text(
                 start_x, pdl + 0.35,
-                f"PREV DAY LOW: {pdl:.2f}¢",
+                f"PREV LOW{p_date_badge}: {pdl:.2f}¢",
                 color="#ffffff",
                 fontweight="bold",
                 fontsize=8,
@@ -387,6 +431,7 @@ def generate_intraday_5m_chart(
                 ha="left",
                 bbox=dict(boxstyle="square,pad=0.2", fc="#141c26", ec="#ffffff", lw=0.8, alpha=0.9)
             )
+
 
         # Smooth spline interpolation via PchipInterpolator
         x_pts = df["dt"].apply(lambda t: t.timestamp()).values
@@ -472,7 +517,15 @@ def generate_intraday_5m_chart(
         ax1.set_ylabel("Price (¢/lb)", fontsize=10.5, color="#e0e0e0", labelpad=8)
         ax1.grid(True, color=grid_color, linestyle="--", linewidth=0.7, alpha=0.8)
         ax1.legend(loc="lower left", framealpha=0.85, facecolor=bg_color, edgecolor=grid_color, fontsize=8.5, ncol=3)
-        ax1.set_title(f"KC Coffee 'C' · {interval_minutes}-Minute Smooth Intraday Curve & Calendar Spreads", fontsize=13, fontweight="bold", color="#ffffff", pad=12)
+        try:
+            target_dt = datetime.strptime(target_date_str, "%Y-%m-%d")
+            date_title_str = target_dt.strftime("%b %d, %Y")
+        except Exception:
+            date_title_str = target_date_str
+        ax1.set_title(
+            f"KC Coffee 'C' · Daily {interval_minutes}m Chart ({date_title_str})",
+            fontsize=13, fontweight="bold", color="#ffffff", pad=12
+        )
 
         # --- SUBPLOT 2: Spreads ---
         if can_smooth:
@@ -526,17 +579,25 @@ def generate_intraday_5m_chart(
         ax2.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M ET"))
         ax2.set_xlabel(f"Time (America/New_York) · {interval_minutes}m Intervals", fontsize=10, color="#bdbdbd", labelpad=8)
 
-        # Expand x-limits to fit right edge labels cleanly
-        time_span = (df["dt"].iloc[-1] - df["dt"].iloc[0]).total_seconds()
-        pad_seconds = max(300, time_span * 0.14)
-        ax2.set_xlim(df["dt"].iloc[0] - timedelta(seconds=120), df["dt"].iloc[-1] + timedelta(seconds=pad_seconds))
+        # Expand x-limits to fit right edge labels cleanly and anchor at market open
+        try:
+            session_open_dt = pd.to_datetime(f"{target_date_str} 04:15").tz_localize(NY_TZ)
+            x_min = min(df["dt"].iloc[0] - timedelta(minutes=5), session_open_dt - timedelta(minutes=5))
+            min_span_dt = session_open_dt + timedelta(hours=2.5)
+            x_max = max(df["dt"].iloc[-1] + timedelta(minutes=30), min_span_dt)
+            ax2.set_xlim(x_min, x_max)
+        except Exception:
+            time_span = (df["dt"].iloc[-1] - df["dt"].iloc[0]).total_seconds()
+            pad_seconds = max(300, time_span * 0.14)
+            ax2.set_xlim(df["dt"].iloc[0] - timedelta(seconds=120), df["dt"].iloc[-1] + timedelta(seconds=pad_seconds))
 
         # Bottom footer
         last_time_str = latest["dt"].strftime("%b %d, %Y · %H:%M ET")
-        footer_parts = [f"Last Price Update: {last_time_str} · {interval_minutes}m Resampled"]
+        footer_parts = [f"Last Price Update: {last_time_str} · Daily {interval_minutes}m Resampled"]
         if pdh is not None and pdl is not None and pdh > 0 and pdl > 0:
-            footer_parts.append(f"Prev Day High/Low: {pdh:.2f} / {pdl:.2f}¢")
+            footer_parts.append(f"Prev Day Range{p_date_badge}: High {pdh:.2f} / Low {pdl:.2f}¢")
         fig.text(0.98, 0.015, " · ".join(footer_parts), fontsize=8.5, color="#78909c", ha="right", va="bottom")
+
 
         fig.subplots_adjust(top=0.92, bottom=0.08, left=0.08, right=0.90, hspace=0.12)
         out_img.parent.mkdir(parents=True, exist_ok=True)

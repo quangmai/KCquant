@@ -19,7 +19,7 @@ mkdir -p output/monitor
 echo "----------------------------------------------------------------"
 echo "[$(date -u +"%Y-%m-%d %H:%M:%S UTC")] Running hourly Telegram monitor check..."
 
-PYTHONPATH="${ROOT_DIR}/src:${ROOT_DIR}/scripts" python3 scripts/telegram_zh_bot.py
+PYTHONPATH="${ROOT_DIR}/src:${ROOT_DIR}/scripts" python3 scripts/telegram_kc_bot.py
 
 EXIT_CODE=$?
 echo "[$(date -u +"%Y-%m-%d %H:%M:%S UTC")] Finished with exit code ${EXIT_CODE}"

@@ -195,7 +195,7 @@ def run_telegram_update(force: bool = False, z_price: float | None = None,
     log_file = monitor_dir / "kc_telegram_log.jsonl"
     with open(log_file, "a") as f:
         log_entry = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(ZoneInfo("UTC")).isoformat(),
             "ny_time": now_ny.strftime("%Y-%m-%d %H:%M:%S ET"),
             "market_open": is_open,
             "telegram_sent": success,
@@ -205,6 +205,7 @@ def run_telegram_update(force: bool = False, z_price: float | None = None,
             "spread_hk_cents": result["spread_hk_cents"]
         }
         f.write(json.dumps(log_entry) + "\n")
+
 
     return success, res_str
 
@@ -409,9 +410,14 @@ def main():
                     if lines:
                         last_entry = json.loads(lines[-1])
                         if "timestamp" in last_entry:
-                            last_report_ts = datetime.fromisoformat(last_entry["timestamp"]).timestamp()
+                            ts_str = last_entry["timestamp"]
+                            dt_obj = datetime.fromisoformat(ts_str)
+                            if dt_obj.tzinfo is None:
+                                dt_obj = dt_obj.replace(tzinfo=ZoneInfo("UTC"))
+                            last_report_ts = dt_obj.timestamp()
             except Exception:
-                pass
+                last_report_ts = 0.0
+
 
         offset = 0
         while _RUNNING:

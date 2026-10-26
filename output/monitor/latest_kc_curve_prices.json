@@ -1,35 +1,36 @@
 {
-  "kcz26": 310.05,
-  "kch27": 292.05,
+  "kcz26": 306.0,
+  "kch27": 306.0,
   "kck27": 287.9,
-  "spread_zh": 18.0,
-  "spread_hk": 4.15,
-  "price_source": "Live Market (CQG Desktop \u00b7 04:32 ET)",
-  "quote_time_ny": "2026-10-26 04:32 ET",
+  "spread_zh": 0.0,
+  "spread_hk": 18.1,
+  "price_source": "Live Market (ICE / Yahoo \u00b7 13:29 ET)",
+  "quote_time_ny": "2026-10-23 13:29 ET",
   "live_meta": {
     "kcz26": {
       "contract": "KCZ26",
-      "cqg_symbol": "KCEZ26",
-      "price": 310.05,
-      "prev_close": 314.9,
+      "ticker": "KCZ26.NYB",
+      "price": 306.0,
+      "prev_close": 312.45,
       "high": 314.9,
       "low": 305.3,
-      "volume": 0,
-      "datetime_ny": "2026-10-26 04:32 ET",
-      "time_str": "04:32 ET",
-      "source": "Live Market (CQG Desktop \u00b7 04:32 ET)"
+      "volume": 14552,
+      "timestamp": 1792776597,
+      "datetime_ny": "2026-10-23 13:29 ET",
+      "time_str": "13:29 ET",
+      "source": "Live Market (ICE / Yahoo \u00b7 13:29 ET)"
     },
     "kch27": {
       "contract": "KCH27",
       "cqg_symbol": "KCEH27",
-      "price": 292.05,
-      "prev_close": 287.9,
-      "high": 314.9,
-      "low": 284.65,
+      "price": 306.0,
+      "prev_close": 292.05,
+      "high": 306.0,
+      "low": 283.45,
       "volume": 0,
-      "datetime_ny": "2026-10-26 04:33 ET",
-      "time_str": "04:33 ET",
-      "source": "Live Market (CQG Desktop \u00b7 04:33 ET)"
+      "datetime_ny": "2026-10-26 04:48 ET",
+      "time_str": "04:48 ET",
+      "source": "Live Market (CQG Desktop \u00b7 04:48 ET)"
     },
     "kck27": {
       "contract": "KCK27",
@@ -44,9 +45,9 @@
       "time_str": "13:29 ET",
       "source": "Live Market (ICE / Yahoo \u00b7 13:29 ET)"
     },
-    "spread_zh": 18.0,
-    "spread_hk": 4.15,
-    "quote_time_ny": "2026-10-26 04:32 ET",
-    "source": "Live Market (CQG Desktop \u00b7 04:32 ET)"
+    "spread_zh": 0.0,
+    "spread_hk": 18.1,
+    "quote_time_ny": "2026-10-23 13:29 ET",
+    "source": "Live Market (ICE / Yahoo \u00b7 13:29 ET)"
   }
 }

@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-10-27T08:38:23.236194",
+  "timestamp": "2026-10-27T08:53:23.931385",
   "as_of_report_date": "2026-10-26",
   "kcz26_price": 299.5,
   "kch27_price": 299.5,
@@ -23,5 +23,5 @@
   "last_grading_failed": 1278,
   "last_grading_rate": 62.7,
   "total_pipeline_bags": 256686,
-  "fetch_duration_ms": 53977
+  "fetch_duration_ms": 53822
 }

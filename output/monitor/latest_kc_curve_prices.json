@@ -1,9 +1,9 @@
 {
   "kcz26": 299.5,
-  "kch27": 299.5,
+  "kch27": 277.5,
   "kck27": 279.95,
-  "spread_zh": 0.0,
-  "spread_hk": 19.55,
+  "spread_zh": 22.0,
+  "spread_hk": -2.45,
   "price_source": "Live Market (ICE / Yahoo \u00b7 13:29 ET)",
   "quote_time_ny": "2026-10-26 13:29 ET",
   "live_meta": {
@@ -23,14 +23,14 @@
     "kch27": {
       "contract": "KCH27",
       "cqg_symbol": "KCEH27",
-      "price": 299.5,
-      "prev_close": 284.25,
-      "high": 299.5,
+      "price": 277.5,
+      "prev_close": 276.9,
+      "high": 285.65,
       "low": 274.35,
       "volume": 0,
-      "datetime_ny": "2026-10-27 04:53 ET",
-      "time_str": "04:53 ET",
-      "source": "Live Market (CQG Desktop \u00b7 04:53 ET)"
+      "datetime_ny": "2026-10-27 05:08 ET",
+      "time_str": "05:08 ET",
+      "source": "Live Market (CQG Desktop \u00b7 05:08 ET)"
     },
     "kck27": {
       "contract": "KCK27",
@@ -45,8 +45,8 @@
       "time_str": "13:29 ET",
       "source": "Live Market (ICE / Yahoo \u00b7 13:29 ET)"
     },
-    "spread_zh": 0.0,
-    "spread_hk": 19.55,
+    "spread_zh": 22.0,
+    "spread_hk": -2.45,
     "quote_time_ny": "2026-10-26 13:29 ET",
     "source": "Live Market (ICE / Yahoo \u00b7 13:29 ET)"
   }

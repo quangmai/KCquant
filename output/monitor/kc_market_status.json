@@ -1,13 +1,13 @@
 {
-  "timestamp": "2026-11-05T11:03:08.214391",
+  "timestamp": "2026-11-05T11:18:08.747842",
   "as_of_report_date": "2026-11-04",
-  "kcz26_price": 282.0,
-  "kch27_price": 273.5,
-  "kck27_price": 269.35,
-  "spread_zh_cents": 8.5,
-  "spread_hk_cents": 4.15,
-  "price_source": "Live Market (CQG Desktop \u00b7 06:03 ET)",
-  "quote_time_ny": "2026-11-05 06:03 ET",
+  "kcz26_price": 280.7,
+  "kch27_price": 272.25,
+  "kck27_price": 268.0,
+  "spread_zh_cents": 8.45,
+  "spread_hk_cents": 4.25,
+  "price_source": "Live Market (CQG Desktop \u00b7 06:18 ET)",
+  "quote_time_ny": "2026-11-05 06:18 ET",
   "certified_stocks_bags": 220379,
   "certified_stock_delta_bags": 0,
   "pending_grading_bags": 55396,
@@ -23,5 +23,5 @@
   "last_grading_failed": 1360,
   "last_grading_rate": 70.1,
   "total_pipeline_bags": 275775,
-  "fetch_duration_ms": 13543
+  "fetch_duration_ms": 13719
 }

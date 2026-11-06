@@ -1,16 +1,16 @@
 {
   "positions": {
     "KCZ26": {
-      "net_qty": 0,
-      "side": "FLAT",
-      "avg_price_cents": 0.0,
-      "current_price_cents": 308.75,
+      "net_qty": 1,
+      "side": "LONG",
+      "avg_price_cents": 279.6,
+      "current_price_cents": 279.6,
       "realized_pnl_usd": 543.75,
       "unrealized_pnl_usd": 0.0
     }
   },
   "realized_pnl_usd": 543.75,
   "unrealized_pnl_usd": 0.0,
-  "total_orders": 26,
-  "updated_at": "2026-10-23T08:19:26.783468-04:00"
+  "total_orders": 27,
+  "updated_at": "2026-11-06T08:22:11.585834-05:00"
 }

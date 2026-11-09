@@ -1,26 +1,26 @@
 {
-  "kcz26": 276.7,
+  "kcz26": 276.45,
   "kch27": 269.8,
   "kck27": 265.3,
-  "spread_zh": 6.9,
+  "spread_zh": 6.65,
   "spread_hk": 4.5,
-  "price_source": "Live Market (CQG Desktop \u00b7 11:06 ET)",
-  "quote_time_ny": "2026-11-09 11:06 ET",
+  "price_source": "Live Market (CQG Desktop \u00b7 11:21 ET)",
+  "quote_time_ny": "2026-11-09 11:21 ET",
   "live_meta": {
     "kcz26": {
       "contract": "KCZ26",
       "cqg_symbol": "KCEZ26",
-      "price": 276.7,
-      "bid": 276.65,
-      "ask": 276.75,
-      "change": -3.45,
+      "price": 276.45,
+      "bid": 276.45,
+      "ask": 276.5,
+      "change": -3.7,
       "prev_close": 280.15,
-      "high": 276.75,
-      "low": 276.65,
+      "high": 276.5,
+      "low": 276.45,
       "volume": 0,
-      "datetime_ny": "2026-11-09 11:06 ET",
-      "time_str": "11:06 ET",
-      "source": "Live Market (CQG Desktop \u00b7 11:06 ET)"
+      "datetime_ny": "2026-11-09 11:21 ET",
+      "time_str": "11:21 ET",
+      "source": "Live Market (CQG Desktop \u00b7 11:21 ET)"
     },
     "kch27": {
       "contract": "KCH27",
@@ -33,28 +33,28 @@
       "high": 269.85,
       "low": 269.75,
       "volume": 0,
-      "datetime_ny": "2026-11-09 11:06 ET",
-      "time_str": "11:06 ET",
-      "source": "Live Market (CQG Desktop \u00b7 11:06 ET)"
+      "datetime_ny": "2026-11-09 11:21 ET",
+      "time_str": "11:21 ET",
+      "source": "Live Market (CQG Desktop \u00b7 11:21 ET)"
     },
     "kck27": {
       "contract": "KCK27",
       "cqg_symbol": "KCEK27",
       "price": 265.3,
-      "bid": 265.25,
-      "ask": 265.4,
+      "bid": 265.3,
+      "ask": 265.45,
       "change": -2.1,
       "prev_close": 267.4,
-      "high": 265.4,
-      "low": 265.25,
+      "high": 265.45,
+      "low": 265.3,
       "volume": 0,
-      "datetime_ny": "2026-11-09 11:06 ET",
-      "time_str": "11:06 ET",
-      "source": "Live Market (CQG Desktop \u00b7 11:06 ET)"
+      "datetime_ny": "2026-11-09 11:21 ET",
+      "time_str": "11:21 ET",
+      "source": "Live Market (CQG Desktop \u00b7 11:21 ET)"
     },
-    "spread_zh": 6.9,
+    "spread_zh": 6.65,
     "spread_hk": 4.5,
-    "quote_time_ny": "2026-11-09 11:06 ET",
-    "source": "Live Market (CQG Desktop \u00b7 11:06 ET)"
+    "quote_time_ny": "2026-11-09 11:21 ET",
+    "source": "Live Market (CQG Desktop \u00b7 11:21 ET)"
   }
 }

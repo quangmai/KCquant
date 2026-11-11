@@ -1,24 +1,24 @@
 {
-  "kcz26": 269.3,
+  "kcz26": 269.15,
   "kch27": 264.9,
-  "kck27": 260.65,
-  "spread_zh": 4.4,
-  "spread_hk": 4.25,
-  "price_source": "Live Market (ICE / Yahoo \u00b7 12:13 ET)",
-  "quote_time_ny": "2026-11-11 12:13 ET",
+  "kck27": 260.5,
+  "spread_zh": 4.25,
+  "spread_hk": 4.4,
+  "price_source": "Live Market (ICE / Yahoo \u00b7 12:28 ET)",
+  "quote_time_ny": "2026-11-11 12:28 ET",
   "live_meta": {
     "kcz26": {
       "contract": "KCZ26",
       "ticker": "KCZ26.NYB",
-      "price": 269.3,
+      "price": 269.15,
       "prev_close": 271.4,
       "high": 271.95,
       "low": 266.9,
-      "volume": 17004,
-      "timestamp": 1794417180,
-      "datetime_ny": "2026-11-11 12:13 ET",
-      "time_str": "12:13 ET",
-      "source": "Live Market (ICE / Yahoo \u00b7 12:13 ET)"
+      "volume": 18490,
+      "timestamp": 1794418107,
+      "datetime_ny": "2026-11-11 12:28 ET",
+      "time_str": "12:28 ET",
+      "source": "Live Market (ICE / Yahoo \u00b7 12:28 ET)"
     },
     "kch27": {
       "contract": "KCH27",
@@ -31,28 +31,28 @@
       "high": 264.95,
       "low": 264.85,
       "volume": 0,
-      "datetime_ny": "2026-11-11 12:33 ET",
-      "time_str": "12:33 ET",
-      "source": "Live Market (CQG Desktop \u00b7 12:33 ET)"
+      "datetime_ny": "2026-11-11 12:48 ET",
+      "time_str": "12:48 ET",
+      "source": "Live Market (CQG Desktop \u00b7 12:48 ET)"
     },
     "kck27": {
       "contract": "KCK27",
       "cqg_symbol": "KCEK27",
-      "price": 260.65,
+      "price": 260.5,
       "bid": 260.55,
       "ask": 260.7,
-      "change": -1.55,
+      "change": -1.7,
       "prev_close": 262.2,
       "high": 260.7,
-      "low": 260.55,
+      "low": 260.5,
       "volume": 0,
-      "datetime_ny": "2026-11-11 12:34 ET",
-      "time_str": "12:34 ET",
-      "source": "Live Market (CQG Desktop \u00b7 12:34 ET)"
+      "datetime_ny": "2026-11-11 12:49 ET",
+      "time_str": "12:49 ET",
+      "source": "Live Market (CQG Desktop \u00b7 12:49 ET)"
     },
-    "spread_zh": 4.4,
-    "spread_hk": 4.25,
-    "quote_time_ny": "2026-11-11 12:13 ET",
-    "source": "Live Market (ICE / Yahoo \u00b7 12:13 ET)"
+    "spread_zh": 4.25,
+    "spread_hk": 4.4,
+    "quote_time_ny": "2026-11-11 12:28 ET",
+    "source": "Live Market (ICE / Yahoo \u00b7 12:28 ET)"
   }
 }

@@ -199,3 +199,27 @@ def test_daily_chart_isolates_new_trading_day(tmp_path):
     assert img is not None
     assert img.exists()
 
+
+def test_h27_focus_chart_generation(tmp_path):
+    csv_file = tmp_path / "h27_focus_intraday.csv"
+    out_img = tmp_path / "h27_focus_chart.png"
+
+    rows = [
+        {"datetime_ny": "2026-11-17 04:15", "timestamp": 1794888900, "kcz26": 305.0, "kch27": 299.0, "kck27": 294.5, "spread_zh": 6.0, "spread_hk": 4.5},
+        {"datetime_ny": "2026-11-17 04:30", "timestamp": 1794889800, "kcz26": 304.8, "kch27": 299.2, "kck27": 294.7, "spread_zh": 5.6, "spread_hk": 4.5},
+        {"datetime_ny": "2026-11-17 04:45", "timestamp": 1794890700, "kcz26": 305.2, "kch27": 299.5, "kck27": 295.0, "spread_zh": 5.7, "spread_hk": 4.5},
+        {"datetime_ny": "2026-11-17 05:00", "timestamp": 1794891600, "kcz26": 305.5, "kch27": 300.0, "kck27": 295.3, "spread_zh": 5.5, "spread_hk": 4.7},
+    ]
+    pd.DataFrame(rows).to_csv(csv_file, index=False)
+
+    img = generate_intraday_5m_chart(
+        csv_path=csv_file,
+        output_image=out_img,
+        prev_day_high=298.50,
+        prev_day_low=286.20,
+        contract="KCH27"
+    )
+    assert img is not None
+    assert img.exists()
+    assert img.stat().st_size > 1000
+

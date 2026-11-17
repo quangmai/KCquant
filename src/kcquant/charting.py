@@ -80,8 +80,8 @@ def record_cqg_intraday_snapshot(data: dict, csv_path: Path | None = None) -> Pa
     return path
 
 
-def get_prev_day_range(contract: str = "KCZ26", target_date: str | None = None) -> dict[str, float | str] | None:
-    """Retrieve previous trading day high, low, and close for a contract (e.g. KCZ26).
+def get_prev_day_range(contract: str = "KCH27", target_date: str | None = None) -> dict[str, float | str] | None:
+    """Retrieve previous trading day high, low, and close for a contract (e.g. KCH27).
 
     Queries Yahoo Finance for daily bars, selects the latest session strictly prior to target_date,
     and caches results in output/monitor/kc_prev_day_range_{contract}.json keyed by trading date.
@@ -172,14 +172,20 @@ def get_prev_day_range(contract: str = "KCZ26", target_date: str | None = None) 
         except Exception:
             pass
 
-    # Baseline fallback for KCZ26
+    # Baseline fallbacks per contract
+    fallbacks = {
+        "KCH27": {"high": 298.50, "low": 286.20, "close": 294.00},
+        "KCZ26": {"high": 315.50, "low": 302.25, "close": 312.45},
+        "KCK27": {"high": 293.00, "low": 281.50, "close": 289.00},
+    }
+    fb = fallbacks.get(clean_sym, {"high": 298.50, "low": 286.20, "close": 294.00})
     return {
         "contract": clean_sym,
         "trading_date": str(current_trading_date),
         "date": "2026-10-22",
-        "high": 315.50,
-        "low": 302.25,
-        "close": 312.45,
+        "high": fb["high"],
+        "low": fb["low"],
+        "close": fb["close"],
         "updated_at": now_ny.isoformat()
     }
 
@@ -285,14 +291,13 @@ def generate_intraday_5m_chart(
     prev_day_high: float | None = None,
     prev_day_low: float | None = None,
     prev_day_date: str | None = None,
-    contract: str = "KCZ26",
+    contract: str = "KCH27",
     interval_minutes: int = 15,
 ) -> Path | None:
     """Generate high-resolution smoothed price line chart with dark aesthetics.
 
-    Subplot 1: KCZ26, KCH27, KCK27 outright prices smoothed at 15-minute intervals,
-               with previous day high and low drawn as crisp white lines to show if
-               price has cut through the range.
+    Subplot 1: Focus on KCH27 price range (previous day high/low), with KCZ26 and KCK27
+               as reference curves smoothed at 15-minute intervals.
     Subplot 2: Z/H Spread and H/K Spread smoothed at 15-minute intervals.
     """
     import matplotlib
@@ -396,7 +401,7 @@ def generate_intraday_5m_chart(
         c_hk = "#2979ff"  # Royal Blue for H/K
 
         # --- SUBPLOT 1: Outrights & Previous Day High/Low ---
-        # Previous Day High / Low white lines
+        # Previous Day High / Low lines for primary contract (KCH27)
         p_date_badge = ""
         if p_date:
             try:
@@ -405,31 +410,31 @@ def generate_intraday_5m_chart(
                 p_date_badge = f" ({p_date})"
 
         if pdh is not None and pdl is not None and pdh > 0 and pdl > 0:
-            ax1.axhline(pdh, color="#ffffff", linestyle="--", linewidth=1.3, alpha=0.9, zorder=2)
-            ax1.axhline(pdl, color="#ffffff", linestyle="--", linewidth=1.3, alpha=0.9, zorder=2)
-            ax1.axhspan(pdl, pdh, color="#ffffff", alpha=0.035, zorder=1)
+            ax1.axhline(pdh, color="#ffab00", linestyle="--", linewidth=1.4, alpha=0.9, zorder=2)
+            ax1.axhline(pdl, color="#ffab00", linestyle="--", linewidth=1.4, alpha=0.9, zorder=2)
+            ax1.axhspan(pdl, pdh, color="#ffab00", alpha=0.045, zorder=1)
 
             # Left inline badges for PDH and PDL with date
             start_x = df["dt"].iloc[0] + timedelta(minutes=2)
             ax1.text(
                 start_x, pdh + 0.35,
-                f"PREV HIGH{p_date_badge}: {pdh:.2f}¢",
-                color="#ffffff",
+                f"H27 PREV HIGH{p_date_badge}: {pdh:.2f}¢",
+                color="#ffab00",
                 fontweight="bold",
-                fontsize=8,
+                fontsize=8.5,
                 va="bottom",
                 ha="left",
-                bbox=dict(boxstyle="square,pad=0.2", fc="#141c26", ec="#ffffff", lw=0.8, alpha=0.9)
+                bbox=dict(boxstyle="square,pad=0.25", fc="#141c26", ec="#ffab00", lw=0.9, alpha=0.9)
             )
             ax1.text(
                 start_x, pdl + 0.35,
-                f"PREV LOW{p_date_badge}: {pdl:.2f}¢",
-                color="#ffffff",
+                f"H27 PREV LOW{p_date_badge}: {pdl:.2f}¢",
+                color="#ffab00",
                 fontweight="bold",
-                fontsize=8,
+                fontsize=8.5,
                 va="bottom",
                 ha="left",
-                bbox=dict(boxstyle="square,pad=0.2", fc="#141c26", ec="#ffffff", lw=0.8, alpha=0.9)
+                bbox=dict(boxstyle="square,pad=0.25", fc="#141c26", ec="#ffab00", lw=0.9, alpha=0.9)
             )
 
 
@@ -446,61 +451,63 @@ def generate_intraday_5m_chart(
                 y_smooth_h = PchipInterpolator(x_pts, df["kch27"])(x_smooth)
                 y_smooth_k = PchipInterpolator(x_pts, df["kck27"])(x_smooth)
 
-                ax1.plot(x_smooth_dt, y_smooth_z, color=c_z, linewidth=2.3, label="KCZ26 (Dec 26)", zorder=3)
-                ax1.plot(x_smooth_dt, y_smooth_h, color=c_h, linewidth=2.1, label="KCH27 (Mar 27)", zorder=3)
-                ax1.plot(x_smooth_dt, y_smooth_k, color=c_k, linewidth=1.9, label="KCK27 (May 27)", zorder=3)
+                # Primary Focus: KCH27 (Bold, prominent amber line, higher zorder)
+                ax1.plot(x_smooth_dt, y_smooth_h, color=c_h, linewidth=3.0, label="KCH27 (Mar 27) · Focus", zorder=5)
+                # Reference Curves: KCZ26 & KCK27 (Thinner dashed lines)
+                ax1.plot(x_smooth_dt, y_smooth_z, color=c_z, linewidth=1.6, linestyle="--", alpha=0.75, label="KCZ26 (Dec 26) · Ref", zorder=3)
+                ax1.plot(x_smooth_dt, y_smooth_k, color=c_k, linewidth=1.6, linestyle="--", alpha=0.75, label="KCK27 (May 27) · Ref", zorder=3)
 
                 # Overlay 15-min interval markers
-                ax1.scatter(df["dt"], df["kcz26"], color=c_z, s=22, zorder=4, alpha=0.95)
-                ax1.scatter(df["dt"], df["kch27"], color=c_h, s=20, zorder=4, alpha=0.95)
-                ax1.scatter(df["dt"], df["kck27"], color=c_k, s=18, zorder=4, alpha=0.95)
+                ax1.scatter(df["dt"], df["kch27"], color=c_h, s=36, zorder=6, alpha=1.0)
+                ax1.scatter(df["dt"], df["kcz26"], color=c_z, s=14, zorder=4, alpha=0.65)
+                ax1.scatter(df["dt"], df["kck27"], color=c_k, s=14, zorder=4, alpha=0.65)
             except Exception:
                 can_smooth = False
 
         if not can_smooth:
-            ax1.plot(df["dt"], df["kcz26"], color=c_z, linewidth=2.3, label="KCZ26 (Dec 26)", marker="o", markersize=4, zorder=3)
-            ax1.plot(df["dt"], df["kch27"], color=c_h, linewidth=2.1, label="KCH27 (Mar 27)", marker="o", markersize=4, zorder=3)
-            ax1.plot(df["dt"], df["kck27"], color=c_k, linewidth=1.9, label="KCK27 (May 27)", marker="o", markersize=4, zorder=3)
+            ax1.plot(df["dt"], df["kch27"], color=c_h, linewidth=3.0, label="KCH27 (Mar 27) · Focus", marker="o", markersize=5, zorder=5)
+            ax1.plot(df["dt"], df["kcz26"], color=c_z, linewidth=1.6, linestyle="--", alpha=0.75, label="KCZ26 (Dec 26) · Ref", marker="o", markersize=3, zorder=3)
+            ax1.plot(df["dt"], df["kck27"], color=c_k, linewidth=1.6, linestyle="--", alpha=0.75, label="KCK27 (May 27) · Ref", marker="o", markersize=3, zorder=3)
 
         # Annotate latest prices on ax1
         latest = df.iloc[-1]
         ax1.annotate(
-            f"KCZ26: {latest['kcz26']:.2f}¢",
-            xy=(latest["dt"], latest["kcz26"]),
-            xytext=(10, 0), textcoords="offset points",
-            color=c_z, fontweight="bold", fontsize=9,
-            va="center",
-            bbox=dict(boxstyle="round,pad=0.25", fc=bg_color, ec=c_z, alpha=0.9)
-        )
-        ax1.annotate(
-            f"KCH27: {latest['kch27']:.2f}¢",
+            f"KCH27: {latest['kch27']:.2f}¢ [FOCUS]",
             xy=(latest["dt"], latest["kch27"]),
             xytext=(10, 0), textcoords="offset points",
-            color=c_h, fontweight="bold", fontsize=9,
+            color=c_h, fontweight="bold", fontsize=10.5,
             va="center",
-            bbox=dict(boxstyle="round,pad=0.25", fc=bg_color, ec=c_h, alpha=0.9)
+            bbox=dict(boxstyle="round,pad=0.35", fc="#1b2230", ec=c_h, lw=1.5, alpha=0.95)
         )
         ax1.annotate(
-            f"KCK27: {latest['kck27']:.2f}¢",
+            f"KCZ26: {latest['kcz26']:.2f}¢ (Ref)",
+            xy=(latest["dt"], latest["kcz26"]),
+            xytext=(10, 0), textcoords="offset points",
+            color=c_z, fontweight="normal", fontsize=8.5,
+            va="center",
+            bbox=dict(boxstyle="round,pad=0.2", fc=bg_color, ec=c_z, lw=0.8, alpha=0.8)
+        )
+        ax1.annotate(
+            f"KCK27: {latest['kck27']:.2f}¢ (Ref)",
             xy=(latest["dt"], latest["kck27"]),
             xytext=(10, 0), textcoords="offset points",
-            color=c_k, fontweight="bold", fontsize=9,
+            color=c_k, fontweight="normal", fontsize=8.5,
             va="center",
-            bbox=dict(boxstyle="round,pad=0.25", fc=bg_color, ec=c_k, alpha=0.9)
+            bbox=dict(boxstyle="round,pad=0.2", fc=bg_color, ec=c_k, lw=0.8, alpha=0.8)
         )
 
-        # Check range cut-through status
+        # Check range cut-through status against KCH27
         if pdh is not None and pdl is not None and pdh > 0 and pdl > 0:
-            latest_z = latest["kcz26"]
-            if latest_z < pdl:
-                status_text = f"▼ CUT BELOW PREV LOW ({latest_z - pdl:+.2f}¢)"
+            latest_h = latest["kch27"]
+            if latest_h < pdl:
+                status_text = f"▼ H27 BELOW PREV LOW ({latest_h - pdl:+.2f}¢)"
                 status_color = "#ff5252"
-            elif latest_z > pdh:
-                status_text = f"▲ CUT ABOVE PREV HIGH ({latest_z - pdh:+.2f}¢)"
+            elif latest_h > pdh:
+                status_text = f"▲ H27 ABOVE PREV HIGH ({latest_h - pdh:+.2f}¢)"
                 status_color = "#69f0ae"
             else:
-                status_text = "● INSIDE PREV RANGE"
-                status_color = "#e0e0e0"
+                status_text = "● H27 INSIDE PREV RANGE"
+                status_color = "#ffab00"
 
             ax1.text(
                 0.985, 0.92,
@@ -508,7 +515,7 @@ def generate_intraday_5m_chart(
                 transform=ax1.transAxes,
                 color=status_color,
                 fontweight="bold",
-                fontsize=9,
+                fontsize=9.5,
                 ha="right",
                 va="top",
                 bbox=dict(boxstyle="round,pad=0.35", fc="#1b2230", ec=status_color, lw=1.2, alpha=0.95)
@@ -523,8 +530,8 @@ def generate_intraday_5m_chart(
         except Exception:
             date_title_str = target_date_str
         ax1.set_title(
-            f"KC Coffee 'C' · Daily {interval_minutes}m Chart ({date_title_str})",
-            fontsize=13, fontweight="bold", color="#ffffff", pad=12
+            f"KC Coffee 'C' · KCH27 Price Range Tracker (Z26 & K27 Ref) · Daily {interval_minutes}m ({date_title_str})",
+            fontsize=12.5, fontweight="bold", color="#ffffff", pad=12
         )
 
         # --- SUBPLOT 2: Spreads ---
@@ -595,7 +602,7 @@ def generate_intraday_5m_chart(
         last_time_str = latest["dt"].strftime("%b %d, %Y · %H:%M ET")
         footer_parts = [f"Last Price Update: {last_time_str} · Daily {interval_minutes}m Resampled"]
         if pdh is not None and pdl is not None and pdh > 0 and pdl > 0:
-            footer_parts.append(f"Prev Day Range{p_date_badge}: High {pdh:.2f} / Low {pdl:.2f}¢")
+            footer_parts.append(f"Prev Day Range (KCH27{p_date_badge}): High {pdh:.2f} / Low {pdl:.2f}¢")
         fig.text(0.98, 0.015, " · ".join(footer_parts), fontsize=8.5, color="#78909c", ha="right", va="bottom")
 
 

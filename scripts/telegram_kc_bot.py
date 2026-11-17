@@ -97,10 +97,10 @@ def format_telegram_html(data: dict, is_forced: bool = False) -> str:
     )
 
     prices_section = (
-        f"📊 <b>KC Futures Prices:</b>\n"
-        f"• KCZ26 (Dec 26): <code>{data['kcz26_price']:.2f}¢</code>\n"
-        f"• KCH27 (Mar 27): <code>{data['kch27_price']:.2f}¢</code>\n"
-        f"• KCK27 (May 27): <code>{data['kck27_price']:.2f}¢</code>\n"
+        f"📊 <b>KC Futures Prices (H27 Focus):</b>\n"
+        f"• <b>⭐ KCH27 (Mar 27): <code>{data['kch27_price']:.2f}¢</code></b>\n"
+        f"• KCZ26 (Dec 26) [Ref]: <code>{data['kcz26_price']:.2f}¢</code>\n"
+        f"• KCK27 (May 27) [Ref]: <code>{data['kck27_price']:.2f}¢</code>\n"
         f"• <b>Last Price Update:</b> <code>{quote_time}</code>{dur_str}\n\n"
     )
 
@@ -212,20 +212,26 @@ def run_telegram_update(force: bool = False, z_price: float | None = None,
 
 
 def sync_state_to_git(commit_message: str) -> None:
-    """Commit and push orders/monitor state if running in GitHub Actions or a configured git repo."""
+    """Commit and push orders/monitor state if running in GitHub Actions or explicitly enabled."""
+    if os.environ.get("GITHUB_ACTIONS") != "true" and os.environ.get("ENABLE_GIT_SYNC") != "1":
+        return
+
     try:
         import subprocess
+        git_env = os.environ.copy()
+        git_env["GIT_TERMINAL_PROMPT"] = "0"
+
         res = subprocess.run(
             ["git", "status", "--porcelain", "output/orders", "output/monitor"],
-            capture_output=True, text=True, cwd=str(ROOT)
+            capture_output=True, text=True, cwd=str(ROOT), timeout=10, env=git_env
         )
         if res.stdout.strip():
-            subprocess.run(["git", "config", "user.name", "github-actions[bot]"], cwd=str(ROOT), check=False)
-            subprocess.run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"], cwd=str(ROOT), check=False)
-            subprocess.run(["git", "add", "output/orders/", "output/monitor/"], cwd=str(ROOT), check=False)
-            subprocess.run(["git", "commit", "-m", commit_message], cwd=str(ROOT), check=False)
-            subprocess.run(["git", "pull", "--rebase", "origin", "main"], cwd=str(ROOT), check=False)
-            subprocess.run(["git", "push", "origin", "main"], cwd=str(ROOT), check=False)
+            subprocess.run(["git", "config", "user.name", "github-actions[bot]"], cwd=str(ROOT), check=False, timeout=5, env=git_env)
+            subprocess.run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"], cwd=str(ROOT), check=False, timeout=5, env=git_env)
+            subprocess.run(["git", "add", "output/orders/", "output/monitor/"], cwd=str(ROOT), check=False, timeout=10, env=git_env)
+            subprocess.run(["git", "commit", "-m", commit_message], cwd=str(ROOT), check=False, timeout=10, env=git_env)
+            subprocess.run(["git", "pull", "--rebase", "origin", "main"], cwd=str(ROOT), check=False, timeout=15, env=git_env)
+            subprocess.run(["git", "push", "origin", "main"], cwd=str(ROOT), check=False, timeout=15, env=git_env)
     except Exception as e:
         print(f"[!] Git sync notice: {e}")
 

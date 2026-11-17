@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.kcquant.bot</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/qm/Documents/KCquant/.venv/bin/python</string>
+        <string>/Users/qm/Documents/KCquant/scripts/telegram_kc_bot.py</string>
+        <string>--daemon</string>
+        <string>--interval</string>
+        <string>900</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/qm/Documents/KCquant</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+        <key>PATH</key>
+        <string>/Users/qm/Documents/KCquant/.venv/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/qm/Documents/KCquant/output/monitor/daemon.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/qm/Documents/KCquant/output/monitor/daemon.log</string>
+</dict>
+</plist>

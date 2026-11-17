@@ -419,15 +419,15 @@ def main():
 
     if args.daemon or args.listen:
         mode_str = "daemon" if args.daemon else "interactive listener"
-        print(f"[*] Starting persistent KC market Telegram bot {mode_str} (Interval: {args.interval}s)...")
-        print("[*] Pre-warming CQG Desktop live session for instant sub-second execution...")
+        print(f"[*] Starting persistent KC market Telegram bot {mode_str} (Interval: {args.interval}s)...", flush=True)
+        print("[*] Pre-warming CQG Desktop live session for instant sub-second execution...", flush=True)
         try:
             from kcquant.cqg import get_warm_cqg_driver
             get_warm_cqg_driver()
-            print("[*] CQG Desktop live session ready! Sub-second execution enabled.")
+            print("[*] CQG Desktop live session ready! Sub-second execution enabled.", flush=True)
         except Exception as e:
-            print(f"[!] Notice: CQG pre-warm skipped ({e}). Will use fallback.")
-        print(f"    Listening for interactive order taps & sending market updates every {args.interval // 60}m. Press Ctrl+C to stop.")
+            print(f"[!] Notice: CQG pre-warm skipped ({e}). Will use fallback.", flush=True)
+        print(f"    Listening for interactive order taps & sending market updates every {args.interval // 60}m. Press Ctrl+C to stop.", flush=True)
 
         # Read last report timestamp from log file so we resume cleanly
         last_report_ts = 0.0
@@ -447,12 +447,11 @@ def main():
             except Exception:
                 last_report_ts = 0.0
 
-
         offset = 0
         start_time = time.time()
         while _RUNNING:
             if args.duration > 0 and (time.time() - start_time) >= args.duration:
-                print(f"[*] Target duration ({args.duration}s) reached. Exiting cleanly for runner handover...")
+                print(f"[*] Target duration ({args.duration}s) reached. Exiting cleanly for runner handover...", flush=True)
                 break
             try:
                 # 1. Listen for interactive Telegram button taps and text commands
@@ -464,7 +463,7 @@ def main():
                     now_ny = datetime.now(NY_TZ)
                     is_open, reason = is_market_open(now_ny)
                     if is_open or args.force:
-                        print(f"[{now_ny:%H:%M:%S ET}] Market is open. Running {args.interval // 60}-min update...")
+                        print(f"[{now_ny:%H:%M:%S ET}] Market is open. Running {args.interval // 60}-min update...", flush=True)
                         ok, res = run_telegram_update(
                             force=args.force, z_price=args.z_price,
                             h_price=args.h_price, k_price=args.k_price,
@@ -473,17 +472,17 @@ def main():
                             samples=args.samples,
                             sample_interval=args.sample_interval
                         )
-                        print(f"    Result: {'Sent' if ok else 'Failed'} ({res})")
+                        print(f"    Result: {'Sent' if ok else 'Failed'} ({res})", flush=True)
                     else:
-                        print(f"[{now_ny:%H:%M:%S ET}] {reason}. Waiting...")
+                        print(f"[{now_ny:%H:%M:%S ET}] {reason}. Waiting...", flush=True)
                     last_report_ts = cur_time
 
                 time.sleep(1.5)
             except KeyboardInterrupt:
-                print("\n[*] Stopping Telegram bot daemon.")
+                print("\n[*] Stopping Telegram bot daemon.", flush=True)
                 break
             except Exception as e:
-                print(f"[!] Error in loop: {e}. Retrying in 5s...")
+                print(f"[!] Error in loop: {e}. Retrying in 5s...", flush=True)
                 time.sleep(5)
 
         print("[*] Telegram bot daemon exited cleanly.")

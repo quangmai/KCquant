@@ -2,6 +2,8 @@ name: KC 24/7 Cloud Bot & Monitor
 
 on:
   schedule:
+    # Market-hours 15-minute scheduler (Covers 04:00 - 13:45 ET across EST/EDT, Mon-Fri)
+    - cron: '*/15 8-18 * * 1-5'
     # Watchdog cron: triggers every 5 hours (03:00, 08:00, 13:00, 18:00, 23:00 UTC) as a safety net
     - cron: '0 3,8,13,18,23 * * *'
   repository_dispatch:
@@ -24,6 +26,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   run-cloud-bot:
@@ -34,16 +37,14 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GH_PAT || secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.GITHUB_TOKEN }}
           persist-credentials: true
 
       - name: Configure Authenticated Git Remote
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          if [ -n "${{ secrets.GH_PAT }}" ]; then
-            git remote set-url origin https://x-access-token:${{ secrets.GH_PAT }}@github.com/${{ github.repository }}.git
-          fi
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
 
       - name: Set up Python 3.12
         uses: actions/setup-python@v5
@@ -71,8 +72,8 @@ jobs:
           if [ -z "$DURATION" ]; then
             DURATION="19800"
           fi
-          echo "[*] Launching KC Telegram Cloud Bot Daemon (Duration: ${DURATION}s)..."
-          python scripts/telegram_kc_bot.py --daemon --duration "$DURATION"
+          echo "[*] Launching KC Telegram Cloud Bot Daemon (Duration: ${DURATION}s, Interval: 900s)..."
+          python -u scripts/telegram_kc_bot.py --daemon --interval 900 --duration "$DURATION"
 
       - name: Sync Final State to Main Branch
         if: always()
@@ -85,14 +86,17 @@ jobs:
       - name: Seamless Handover to Next Cloud Runner
         if: always() && github.event.inputs.retrigger != 'false'
         run: |
-          if [ -n "${{ secrets.GH_PAT }}" ]; then
-            echo "[*] Triggering next cloud runner handover..."
+          echo "[*] Triggering next cloud runner handover..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/${{ github.repository }}/actions/workflows/kc_cloud_bot.yml/dispatches \
+            -d '{"ref":"main"}')
+          if [ "$HTTP_CODE" != "204" ] && [ -n "${{ secrets.GH_PAT }}" ]; then
             curl -s -X POST \
               -H "Authorization: token ${{ secrets.GH_PAT }}" \
-              -H "Accept: application/vnd.github.v3+json" \
+              -H "Accept: application/vnd.github+json" \
               https://api.github.com/repos/${{ github.repository }}/actions/workflows/kc_cloud_bot.yml/dispatches \
               -d '{"ref":"main"}' || echo "Dispatch notice"
-            echo "[*] Handover dispatched."
-          else
-            echo "[!] Notice: GH_PAT secret not set. Skipping auto-handover dispatch."
           fi
+          echo "[*] Handover step complete."

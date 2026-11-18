@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-18T17:59:51.986531",
+  "timestamp": "2026-11-18T18:03:20.397555",
   "as_of_report_date": "2026-11-17",
   "kcz26_price": 282.0,
   "kch27_price": 277.85,
@@ -23,5 +23,7 @@
   "last_grading_failed": 1695,
   "last_grading_rate": 87.4,
   "total_pipeline_bags": 407482,
-  "fetch_duration_ms": 204
+  "fetch_duration_ms": 5329,
+  "cqg_ok": false,
+  "cqg_error": "CQG Desktop price fetch failed after 2 retries"
 }

@@ -175,14 +175,15 @@ def run_telegram_update(force: bool = False, z_price: float | None = None,
     chart_path = generate_intraday_5m_chart()
 
     msg_html = format_telegram_html(result, is_forced=force and not is_open)
+    ctrl_kb = build_runner_control_keyboard(paused=is_bot_paused())
 
-    # Deliver via photo card with HTML caption
+    # Deliver via photo card with HTML caption and runner control toggle button
     if chart_path and chart_path.exists():
-        success, res_str = send_telegram_photo(chart_path, caption=msg_html)
+        success, res_str = send_telegram_photo(chart_path, caption=msg_html, reply_markup=ctrl_kb)
         if not success:
-            success, res_str = send_telegram_message(msg_html)
+            success, res_str = send_telegram_message(msg_html, reply_markup=ctrl_kb)
     else:
-        success, res_str = send_telegram_message(msg_html)
+        success, res_str = send_telegram_message(msg_html, reply_markup=ctrl_kb)
 
     # Log to jsonl
     log_file = monitor_dir / "kc_telegram_log.jsonl"
@@ -202,6 +203,167 @@ def run_telegram_update(force: bool = False, z_price: float | None = None,
     sync_state_to_git("Auto-sync 15m monitor history [skip ci]")
 
     return success, res_str
+
+
+CONTROL_STATE_FILE = ROOT / "output" / "monitor" / "bot_control_state.json"
+_PROCESSED_CALLBACK_IDS: set[str] = set()
+
+
+def is_bot_paused(state_file: Path | None = None) -> bool:
+    """Return True if the runner has been paused from Telegram chat."""
+    path = state_file or CONTROL_STATE_FILE
+    if not path.exists():
+        return False
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        return bool(data.get("paused", False))
+    except Exception:
+        return False
+
+
+def set_bot_paused(paused: bool, state_file: Path | None = None) -> dict:
+    """Persist runner paused/active state so it survives runner restarts and handovers."""
+    path = state_file or CONTROL_STATE_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    now_ny = datetime.now(NY_TZ)
+    state = {
+        "paused": bool(paused),
+        "status": "PAUSED" if paused else "ACTIVE",
+        "updated_at_ny": now_ny.strftime("%Y-%m-%d %H:%M:%S ET"),
+        "updated_at_utc": datetime.now(ZoneInfo("UTC")).isoformat(),
+    }
+    with open(path, "w") as f:
+        json.dump(state, f, indent=2)
+    return state
+
+
+def build_runner_control_keyboard(paused: bool = False) -> dict:
+    """Build inline Telegram button to pause or reactivate the runner."""
+    if paused:
+        return {
+            "inline_keyboard": [[
+                {"text": "▶️ Reactivate Runner (/resume)", "callback_data": "ctrl:resume"},
+                {"text": "📊 Send Snapshot Now (/now)", "callback_data": "ctrl:now"},
+            ]]
+        }
+    return {
+        "inline_keyboard": [[
+            {"text": "⏸️ Pause Runner (/pause)", "callback_data": "ctrl:pause"},
+            {"text": "📊 Refresh Now (/now)", "callback_data": "ctrl:now"},
+        ]]
+    }
+
+
+def _handle_pause_action(chat_id: str | int | None, state_file: Path | None = None) -> None:
+    st = set_bot_paused(True, state_file=state_file)
+    msg = (
+        "⏸️ <b>KC Monitor Runner PAUSED</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "• <b>Status:</b> <code>PAUSED</code>\n"
+        f"• <b>Updated:</b> <code>{st['updated_at_ny']}</code>\n\n"
+        "<i>Scheduled 15-minute market updates are suspended. "
+        "Send <code>/resume</code> or tap the button below anytime to reactivate.</i>"
+    )
+    send_telegram_message(msg, chat_id=str(chat_id) if chat_id else None, reply_markup=build_runner_control_keyboard(paused=True))
+    print(f"[*] Runner PAUSED via Telegram at {st['updated_at_ny']}", flush=True)
+    sync_state_to_git("Pause KC runner via Telegram [skip ci]")
+
+
+def _handle_resume_action(chat_id: str | int | None, state_file: Path | None = None) -> None:
+    st = set_bot_paused(False, state_file=state_file)
+    msg = (
+        "▶️ <b>KC Monitor Runner REACTIVATED</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        "• <b>Status:</b> <code>ACTIVE (15m Schedule)</code>\n"
+        f"• <b>Updated:</b> <code>{st['updated_at_ny']}</code>\n\n"
+        "<i>Scheduled 15-minute updates are back online. Dispatching an immediate market snapshot now...</i>"
+    )
+    send_telegram_message(msg, chat_id=str(chat_id) if chat_id else None, reply_markup=build_runner_control_keyboard(paused=False))
+    print(f"[*] Runner REACTIVATED via Telegram at {st['updated_at_ny']}", flush=True)
+    sync_state_to_git("Reactivate KC runner via Telegram [skip ci]")
+
+
+def _handle_status_action(chat_id: str | int | None, state_file: Path | None = None) -> None:
+    paused = is_bot_paused(state_file=state_file)
+    now_ny = datetime.now(NY_TZ)
+    is_open, reason = is_market_open(now_ny)
+    status_badge = "⏸️ PAUSED" if paused else "🟢 ACTIVE (Every 15m)"
+    msg = (
+        "🤖 <b>KC Monitor Runner Status</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━\n"
+        f"• <b>Runner State:</b> <code>{status_badge}</code>\n"
+        f"• <b>Market Status:</b> <code>{'OPEN' if is_open else 'CLOSED'}</code>\n"
+        f"• <b>Detail:</b> <i>{reason}</i>\n"
+        f"• <b>Commands:</b> <code>/pause</code> · <code>/resume</code> · <code>/status</code> · <code>/now</code>"
+    )
+    send_telegram_message(msg, chat_id=str(chat_id) if chat_id else None, reply_markup=build_runner_control_keyboard(paused=paused))
+
+
+def process_telegram_control_commands(
+    offset: int | None = None,
+    state_file: Path | None = None
+) -> tuple[int, bool]:
+    """Poll Telegram for /pause, /resume, /status, /now commands or control button taps.
+
+    Returns:
+        (next_offset: int, trigger_immediate_update: bool)
+    """
+    global _PROCESSED_CALLBACK_IDS
+    from kcquant.notify import get_telegram_updates, answer_telegram_callback
+
+    updates = get_telegram_updates(offset=offset, timeout=2)
+    next_offset = offset or 0
+    trigger_now = False
+
+    for u in updates:
+        up_id = u.get("update_id", 0)
+        next_offset = max(next_offset, up_id + 1)
+
+        # 1. Handle Inline Control Button Taps
+        cb = u.get("callback_query")
+        if cb:
+            cb_id = cb.get("id")
+            if cb_id in _PROCESSED_CALLBACK_IDS:
+                continue
+            if cb_id:
+                _PROCESSED_CALLBACK_IDS.add(cb_id)
+
+            data = cb.get("data", "")
+            chat_id = cb.get("message", {}).get("chat", {}).get("id")
+
+            if data == "ctrl:pause":
+                if cb_id:
+                    answer_telegram_callback(cb_id, text="⏸️ Runner Paused")
+                _handle_pause_action(chat_id, state_file=state_file)
+            elif data == "ctrl:resume":
+                if cb_id:
+                    answer_telegram_callback(cb_id, text="▶️ Runner Reactivated")
+                _handle_resume_action(chat_id, state_file=state_file)
+                trigger_now = True
+            elif data == "ctrl:now":
+                if cb_id:
+                    answer_telegram_callback(cb_id, text="📊 Generating market snapshot...")
+                trigger_now = True
+
+        # 2. Handle Slash Commands in Chat
+        msg = u.get("message")
+        if msg:
+            raw_text = (msg.get("text") or "").strip().lower()
+            cmd = raw_text.split()[0].split("@")[0] if raw_text else ""
+            chat_id = msg.get("chat", {}).get("id")
+
+            if cmd in ["/pause", "/stop"]:
+                _handle_pause_action(chat_id, state_file=state_file)
+            elif cmd in ["/resume", "/start", "/activate", "/reactivate"]:
+                _handle_resume_action(chat_id, state_file=state_file)
+                trigger_now = True
+            elif cmd in ["/status"]:
+                _handle_status_action(chat_id, state_file=state_file)
+            elif cmd in ["/now", "/update"]:
+                trigger_now = True
+
+    return next_offset, trigger_now
 
 
 def sync_state_to_git(commit_message: str) -> None:
@@ -266,6 +428,11 @@ def main():
 
     if args.daemon:
         print(f"[*] Starting persistent KC market Telegram bot daemon (Interval: {args.interval}s)...", flush=True)
+        try:
+            from kcquant.notify import register_telegram_bot_commands
+            register_telegram_bot_commands()
+        except Exception:
+            pass
         print("[*] Pre-warming CQG Desktop live session for instant sub-second execution...", flush=True)
         try:
             from kcquant.cqg import get_warm_cqg_driver
@@ -273,7 +440,7 @@ def main():
             print("[*] CQG Desktop live session ready! Sub-second execution enabled.", flush=True)
         except Exception as e:
             print(f"[!] Notice: CQG pre-warm skipped ({e}). Will use fallback.", flush=True)
-        print(f"    Sending market updates every {args.interval // 60}m. Press Ctrl+C to stop.", flush=True)
+        print(f"    Sending market updates every {args.interval // 60}m & listening for /pause and /resume. Press Ctrl+C to stop.", flush=True)
 
         # Read last report timestamp from log file so we resume cleanly
         last_report_ts = 0.0
@@ -293,33 +460,54 @@ def main():
             except Exception:
                 last_report_ts = 0.0
 
+        offset = 0
         start_time = time.time()
         while _RUNNING:
             if args.duration > 0 and (time.time() - start_time) >= args.duration:
                 print(f"[*] Target duration ({args.duration}s) reached. Exiting cleanly for runner handover...", flush=True)
                 break
             try:
-                # Check if it's time for the 15-minute scheduled report
+                # 1. Poll for /pause, /resume, /status, /now commands or control button taps
+                offset, trigger_now = process_telegram_control_commands(offset)
+
+                if trigger_now:
+                    now_ny = datetime.now(NY_TZ)
+                    print(f"[{now_ny:%H:%M:%S ET}] Immediate update requested from Telegram...", flush=True)
+                    ok, res = run_telegram_update(
+                        force=True, z_price=args.z_price,
+                        h_price=args.h_price, k_price=args.k_price,
+                        no_download=args.no_download,
+                        prefer_live=not args.settle_only,
+                        samples=args.samples,
+                        sample_interval=args.sample_interval
+                    )
+                    print(f"    Result: {'Sent' if ok else 'Failed'} ({res})", flush=True)
+                    last_report_ts = time.time()
+
+                # 2. Check if it's time for the 15-minute scheduled report
                 cur_time = time.time()
                 if cur_time - last_report_ts >= args.interval:
                     now_ny = datetime.now(NY_TZ)
-                    is_open, reason = is_market_open(now_ny)
-                    if is_open or args.force:
-                        print(f"[{now_ny:%H:%M:%S ET}] Market is open. Running {args.interval // 60}-min update...", flush=True)
-                        ok, res = run_telegram_update(
-                            force=args.force, z_price=args.z_price,
-                            h_price=args.h_price, k_price=args.k_price,
-                            no_download=args.no_download,
-                            prefer_live=not args.settle_only,
-                            samples=args.samples,
-                            sample_interval=args.sample_interval
-                        )
-                        print(f"    Result: {'Sent' if ok else 'Failed'} ({res})", flush=True)
+                    if is_bot_paused():
+                        print(f"[{now_ny:%H:%M:%S ET}] Runner is PAUSED via Telegram. Skipping scheduled update...", flush=True)
                     else:
-                        print(f"[{now_ny:%H:%M:%S ET}] {reason}. Waiting...", flush=True)
+                        is_open, reason = is_market_open(now_ny)
+                        if is_open or args.force:
+                            print(f"[{now_ny:%H:%M:%S ET}] Market is open. Running {args.interval // 60}-min update...", flush=True)
+                            ok, res = run_telegram_update(
+                                force=args.force, z_price=args.z_price,
+                                h_price=args.h_price, k_price=args.k_price,
+                                no_download=args.no_download,
+                                prefer_live=not args.settle_only,
+                                samples=args.samples,
+                                sample_interval=args.sample_interval
+                            )
+                            print(f"    Result: {'Sent' if ok else 'Failed'} ({res})", flush=True)
+                        else:
+                            print(f"[{now_ny:%H:%M:%S ET}] {reason}. Waiting...", flush=True)
                     last_report_ts = cur_time
 
-                time.sleep(5)
+                time.sleep(2)
             except KeyboardInterrupt:
                 print("\n[*] Stopping Telegram bot daemon.", flush=True)
                 break
@@ -337,6 +525,10 @@ def main():
         sys.exit(0)
 
     # Single-run execution
+    offset, _ = process_telegram_control_commands()
+    if is_bot_paused() and not args.force:
+        print("[*] Notice: Runner is currently PAUSED via Telegram (use /resume in Telegram or --force).")
+        sys.exit(0)
     ok, res = run_telegram_update(
         force=args.force, z_price=args.z_price,
         h_price=args.h_price, k_price=args.k_price,
@@ -345,6 +537,7 @@ def main():
         samples=args.samples,
         sample_interval=args.sample_interval
     )
+    process_telegram_control_commands(offset)
     print(f"[*] Status: {'Delivered' if ok else 'Notice'} - {res}")
 
 

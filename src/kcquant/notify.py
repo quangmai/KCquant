@@ -156,3 +156,25 @@ def get_telegram_updates(
         pass
     return []
 
+
+def register_telegram_bot_commands(token: str | None = None) -> bool:
+    """Register runner control slash commands in the Telegram chat menu."""
+    load_env()
+    bot_token = os.environ.get("TELEGRAM_BOT_TOKEN") if token is None else token
+    if not bot_token:
+        return False
+
+    url = f"https://api.telegram.org/bot{bot_token}/setMyCommands"
+    commands = [
+        {"command": "pause", "description": "Pause 15-minute scheduled market updates"},
+        {"command": "resume", "description": "Reactivate 15-minute scheduled market updates"},
+        {"command": "status", "description": "Check runner status (Active / Paused) & market hours"},
+        {"command": "now", "description": "Send an immediate market chart snapshot now"},
+    ]
+    try:
+        resp = requests.post(url, json={"commands": commands}, timeout=8.0)
+        return bool(resp.status_code == 200 and resp.json().get("ok"))
+    except Exception:
+        return False
+
+

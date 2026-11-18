@@ -28,6 +28,7 @@ output/*.parquet
 !output/monitor/kc_market_history.csv
 !output/monitor/kc_telegram_log.jsonl
 !output/monitor/zh_spread_history.csv
+!output/monitor/bot_control_state.json
 
 
 # IDE / Editor files

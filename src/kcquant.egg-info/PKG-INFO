@@ -6,7 +6,9 @@ Requires-Python: >=3.10
 Requires-Dist: pandas>=2.0
 Requires-Dist: numpy>=1.24
 Requires-Dist: matplotlib>=3.7
+Requires-Dist: scipy>=1.10
 Requires-Dist: pyarrow>=12
+Requires-Dist: selenium>=4.20
 Provides-Extra: databento
 Requires-Dist: databento>=0.40; extra == "databento"
 Provides-Extra: dev

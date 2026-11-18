@@ -1,9 +1,17 @@
 """Unit tests for the new KC Market & Inventory Telegram Bot."""
 from datetime import datetime
+from unittest.mock import patch
 from zoneinfo import ZoneInfo
 import pytest
 
-from scripts.telegram_kc_bot import format_telegram_html, is_market_open
+from scripts.telegram_kc_bot import (
+    format_telegram_html,
+    is_market_open,
+    is_bot_paused,
+    set_bot_paused,
+    build_runner_control_keyboard,
+    process_telegram_control_commands,
+)
 
 NY_TZ = ZoneInfo("America/New_York")
 
@@ -84,3 +92,63 @@ def test_format_telegram_html_clean_structure():
     assert "Take-Profit Target" not in html
     assert "Stop-Loss Target" not in html
     assert "First Notice Day" not in html
+
+
+def test_bot_pause_and_resume_state(tmp_path):
+    state_file = tmp_path / "bot_control_state.json"
+    assert is_bot_paused(state_file) is False
+
+    st_paused = set_bot_paused(True, state_file)
+    assert st_paused["paused"] is True
+    assert st_paused["status"] == "PAUSED"
+    assert is_bot_paused(state_file) is True
+
+    kb_paused = build_runner_control_keyboard(paused=True)
+    assert kb_paused["inline_keyboard"][0][0]["callback_data"] == "ctrl:resume"
+
+    st_active = set_bot_paused(False, state_file)
+    assert st_active["paused"] is False
+    assert st_active["status"] == "ACTIVE"
+    assert is_bot_paused(state_file) is False
+
+    kb_active = build_runner_control_keyboard(paused=False)
+    assert kb_active["inline_keyboard"][0][0]["callback_data"] == "ctrl:pause"
+
+
+def test_process_telegram_control_commands(tmp_path):
+    state_file = tmp_path / "bot_control_state.json"
+
+    fake_updates_pause = [
+        {
+            "update_id": 100,
+            "message": {"chat": {"id": 501402719}, "text": "/pause"}
+        }
+    ]
+    with patch("kcquant.notify.get_telegram_updates", return_value=fake_updates_pause), \
+         patch("scripts.telegram_kc_bot.send_telegram_message") as mock_send:
+        next_off, trigger_now = process_telegram_control_commands(0, state_file=state_file)
+        assert next_off == 101
+        assert trigger_now is False
+        assert is_bot_paused(state_file) is True
+        assert mock_send.called
+
+    fake_updates_resume = [
+        {
+            "update_id": 101,
+            "callback_query": {
+                "id": "cb_resume_1",
+                "data": "ctrl:resume",
+                "message": {"chat": {"id": 501402719}}
+            }
+        }
+    ]
+    with patch("kcquant.notify.get_telegram_updates", return_value=fake_updates_resume), \
+         patch("kcquant.notify.answer_telegram_callback") as mock_ans, \
+         patch("scripts.telegram_kc_bot.send_telegram_message") as mock_send:
+        next_off, trigger_now = process_telegram_control_commands(101, state_file=state_file)
+        assert next_off == 102
+        assert trigger_now is True
+        assert is_bot_paused(state_file) is False
+        assert mock_ans.called
+        assert mock_send.called
+

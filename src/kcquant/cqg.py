@@ -208,80 +208,66 @@ def get_warm_cqg_driver(force_restart: bool = False):
         return None
 
 
-_LAST_CQG_FAIL_TS: float = 0.0
-_CQG_FAIL_COOLDOWN_SEC: float = 15.0
-
-
 def fetch_instant_cqg_quote(contract: str = "KCZ26") -> dict | None:
-    """Instantly fetch real-time quote for a contract from CQG Desktop.
-
-    Queries the active warm CQG session to obtain live bid, ask, and trade price
-    with sub-second execution latency.
-    """
+    """Instantly fetch real-time quote for a contract from CQG Desktop."""
     clean = contract.replace(".NYB", "").upper()
-    res = fetch_cqg_quotes([clean])
+    res = fetch_cqg_quotes([clean], max_retries=1)
     if res and clean in res:
         return res[clean]
-
-    # Fallback to standalone live contract fetch
-    from kcquant.quotes import fetch_live_contract_quote
-    return fetch_live_contract_quote(clean)
+    return None
 
 
-def fetch_cqg_quotes(contracts: list[str] | None = None) -> dict[str, dict] | None:
+def fetch_cqg_quotes(contracts: list[str] | None = None, max_retries: int = 2) -> dict[str, dict] | None:
     """Extract price quotes for requested contracts from the warm CQG Desktop session.
 
     Reuses the persistent warm headless Chrome driver (`_SHARED_DRIVER`) so quote reads
-    complete in < 200ms rather than cold-booting a browser on every call.
+    complete in < 200ms. If reading fails or symbols are missing, retries up to `max_retries`
+    times (1-2 retries) before returning None.
     """
-    global _LAST_CQG_FAIL_TS
     creds = get_cqg_credentials()
     if not creds:
-        return None
-
-    # Short-circuit if CQG just failed within the last 15s (prevents 4x cascading retries in one cycle)
-    if (time.time() - _LAST_CQG_FAIL_TS) < _CQG_FAIL_COOLDOWN_SEC:
         return None
 
     target_contracts = contracts or ["KCZ26", "KCH27", "KCK27"]
     cqg_targets = {c: to_cqg_symbol(c) for c in target_contracts}
 
-    driver = get_warm_cqg_driver()
-    if driver is None:
-        _LAST_CQG_FAIL_TS = time.time()
-        return None
+    for attempt in range(max_retries + 1):
+        force_restart = (attempt == max_retries and attempt > 0)
+        if attempt > 0 and not force_restart:
+            time.sleep(0.6)
 
-    try:
-        now_ny = datetime.now(NY_TZ)
-        time_str = now_ny.strftime("%H:%M ET")
-        datetime_str = now_ny.strftime("%Y-%m-%d %H:%M ET")
+        driver = get_warm_cqg_driver(force_restart=force_restart)
+        if driver is None:
+            continue
 
-        # 1. Primary extractor: Parse CQG Desktop QSS (Quote SpreadSheet) from warm DOM
-        qss_results = _extract_qss_quotes(driver, now_ny, time_str, datetime_str)
-        if qss_results:
-            matched = {k: v for k, v in qss_results.items() if k in target_contracts}
+        try:
+            now_ny = datetime.now(NY_TZ)
+            time_str = now_ny.strftime("%H:%M ET")
+            datetime_str = now_ny.strftime("%Y-%m-%d %H:%M ET")
+
+            # 1. Primary extractor: Parse CQG Desktop QSS (Quote SpreadSheet) from warm DOM
+            qss_results = _extract_qss_quotes(driver, now_ny, time_str, datetime_str)
+            if qss_results:
+                matched = {k: v for k, v in qss_results.items() if k in target_contracts}
+                if len(matched) == len(target_contracts):
+                    return matched
+
+            results: dict[str, dict] = dict(qss_results or {})
+            for ice_sym, cqg_sym in cqg_targets.items():
+                if ice_sym not in results:
+                    quote = _extract_quote_for_symbol(driver, cqg_sym, ice_sym, now_ny, time_str, datetime_str)
+                    if quote:
+                        results[ice_sym] = quote
+
+            matched = {k: v for k, v in results.items() if k in target_contracts}
             if len(matched) == len(target_contracts):
                 return matched
+            if len(matched) > 0 and attempt == max_retries:
+                return matched
+        except Exception as e:
+            logger.warning(f"CQG quote attempt {attempt + 1}/{max_retries + 1} failed: {e}")
 
-        results: dict[str, dict] = dict(qss_results or {})
-        for ice_sym, cqg_sym in cqg_targets.items():
-            if ice_sym not in results:
-                quote = _extract_quote_for_symbol(driver, cqg_sym, ice_sym, now_ny, time_str, datetime_str)
-                if quote:
-                    results[ice_sym] = quote
-
-        matched = {k: v for k, v in results.items() if k in target_contracts}
-        if len(matched) > 0:
-            if len(matched) < len(target_contracts):
-                _LAST_CQG_FAIL_TS = time.time()
-            return matched
-
-        _LAST_CQG_FAIL_TS = time.time()
-        return None
-    except Exception as e:
-        logger.warning(f"Error fetching quotes from CQG Desktop: {e}")
-        _LAST_CQG_FAIL_TS = time.time()
-        return None
+    return None
 
 
 def _extract_qss_quotes(

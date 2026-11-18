@@ -81,13 +81,15 @@ def record_cqg_intraday_snapshot(data: dict, csv_path: Path | None = None) -> Pa
 
 
 def get_prev_day_range(contract: str = "KCH27", target_date: str | None = None) -> dict[str, float | str] | None:
-    """Retrieve previous trading day high, low, and close for a contract (e.g. KCH27).
+    """Retrieve previous trading day high, low, and close for a contract (e.g. KCH27) from CQG history.
 
-    Queries Yahoo Finance for daily bars, selects the latest session strictly prior to target_date,
-    and caches results in output/monitor/kc_prev_day_range_{contract}.json keyed by trading date.
+    Computes the previous session's High, Low, and Close from persisted CQG intraday snapshots
+    (`output/monitor/kc_cqg_intraday_5m.csv`) or cached range JSON (`output/monitor/kc_prev_day_range_{contract}.json`).
     """
+    import json
     clean_sym = contract.replace(".NYB", "").upper()
-    cache_path = ROOT / "output" / "monitor" / f"kc_prev_day_range_{clean_sym.lower()}.json"
+    col_key = clean_sym.lower()
+    cache_path = ROOT / "output" / "monitor" / f"kc_prev_day_range_{col_key}.json"
 
     now_ny = datetime.now(NY_TZ)
     if target_date:
@@ -101,10 +103,8 @@ def get_prev_day_range(contract: str = "KCH27", target_date: str | None = None) 
     # 1. Check recent cache: valid only if cached specifically for this current_trading_date
     if cache_path.exists():
         try:
-            import json
             with open(cache_path) as f:
                 cached = json.load(f)
-            # Must match current_trading_date and the selected prev date must be strictly prior
             if (
                 cached.get("trading_date") == str(current_trading_date)
                 and cached.get("date") != str(current_trading_date)
@@ -114,57 +114,37 @@ def get_prev_day_range(contract: str = "KCH27", target_date: str | None = None) 
         except Exception:
             pass
 
-    # 2. Query Yahoo Finance daily bars
-    try:
-        import requests
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{clean_sym}.NYB?interval=1d&range=10d"
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)"
-        }
-        resp = requests.get(url, headers=headers, timeout=5.0)
-        if resp.status_code == 200:
-            payload = resp.json()
-            res = payload.get("chart", {}).get("result")
-            if res and len(res) > 0:
-                timestamps = res[0].get("timestamp", [])
-                quotes = res[0].get("indicators", {}).get("quote", [{}])[0]
-                highs = quotes.get("high", [])
-                lows = quotes.get("low", [])
-                closes = quotes.get("close", [])
-
-                valid_bars = []
-                for t, h, l, c in zip(timestamps, highs, lows, closes):
-                    if h is None or l is None or c is None:
-                        continue
-                    b_date = datetime.fromtimestamp(t, tz=NY_TZ).date()
-                    valid_bars.append((b_date, float(h), float(l), float(c)))
-
-                if valid_bars:
-                    # Select the latest bar strictly before current_trading_date
-                    prev_bars = [b for b in valid_bars if b[0] < current_trading_date]
-                    if prev_bars:
-                        target = prev_bars[-1]
+    # 2. Derive previous trading day range from recorded CQG intraday 5m history
+    intraday_csv = ROOT / "output" / "monitor" / "kc_cqg_intraday_5m.csv"
+    if intraday_csv.exists() and intraday_csv.stat().st_size > 0:
+        try:
+            df_hist = pd.read_csv(intraday_csv)
+            if "datetime_ny" in df_hist.columns and col_key in df_hist.columns:
+                df_hist["trade_date"] = df_hist["datetime_ny"].astype(str).str.slice(0, 10)
+                prior_df = df_hist[df_hist["trade_date"] < str(current_trading_date)].dropna(subset=[col_key])
+                if not prior_df.empty:
+                    prev_date_str = str(prior_df["trade_date"].iloc[-1])
+                    day_slice = prior_df[prior_df["trade_date"] == prev_date_str][col_key].astype(float)
+                    if len(day_slice) > 0:
                         result = {
                             "contract": clean_sym,
                             "trading_date": str(current_trading_date),
-                            "date": str(target[0]),
-                            "high": round(target[1], 2),
-                            "low": round(target[2], 2),
-                            "close": round(target[3], 2),
-                            "updated_at": now_ny.isoformat()
+                            "date": prev_date_str,
+                            "high": round(float(day_slice.max()), 2),
+                            "low": round(float(day_slice.min()), 2),
+                            "close": round(float(day_slice.iloc[-1]), 2),
+                            "updated_at": now_ny.isoformat(),
                         }
                         cache_path.parent.mkdir(parents=True, exist_ok=True)
-                        import json
                         with open(cache_path, "w") as f:
                             json.dump(result, f, indent=2)
                         return result
-    except Exception as e:
-        logger.warning(f"Could not fetch previous day range from Yahoo for {clean_sym}: {e}")
+        except Exception as e:
+            logger.warning(f"Could not derive previous day range from CQG intraday CSV for {clean_sym}: {e}")
 
     # 3. Check fallback cache or known baseline
     if cache_path.exists():
         try:
-            import json
             with open(cache_path) as f:
                 cached = json.load(f)
                 if "high" in cached and "low" in cached:
@@ -190,115 +170,15 @@ def get_prev_day_range(contract: str = "KCH27", target_date: str | None = None) 
     }
 
 
-
-_LAST_BACKFILL_TS: dict[str, float] = {}
-
-
 def backfill_intraday_session_history(csv_path: Path | None = None) -> pd.DataFrame:
-    """Ensure today's intraday price history is populated from Yahoo Finance if sparse.
-
-    Queries Yahoo Finance 5-minute bars for KCZ26, KCH27, and KCK27 concurrently from 04:15 ET to now
-    so that fresh runs or cloud containers immediately have a full, unbroken session chart.
-    """
-    import time
-    from concurrent.futures import ThreadPoolExecutor
+    """Load persisted CQG intraday 5-minute price history from disk."""
     path = csv_path or get_default_intraday_csv()
-    now_ny = datetime.now(NY_TZ)
-    today_str = now_ny.strftime("%Y-%m-%d")
-
-    existing_df = None
     if path.exists() and path.stat().st_size > 0:
         try:
-            existing_df = pd.read_csv(path)
-            today_pts = existing_df[existing_df["datetime_ny"].str.startswith(today_str)]
-            if len(today_pts) >= 10:
-                return existing_df
-            # Throttle repeated Yahoo backfill probes to once per 10 minutes per file
-            last_try = _LAST_BACKFILL_TS.get(str(path), 0.0)
-            if len(existing_df) > 0 and (time.time() - last_try) < 600.0:
-                return existing_df
+            return pd.read_csv(path)
         except Exception:
-            existing_df = None
-
-    _LAST_BACKFILL_TS[str(path)] = time.time()
-    import requests
-
-    contracts = ["KCZ26", "KCH27", "KCK27"]
-    quotes_by_contract: dict[str, dict[int, float]] = {}
-
-    def _fetch_sym_5m(sym: str) -> tuple[str, dict[int, float]]:
-        ticker = f"{sym}.NYB"
-        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=5m&range=1d"
-        headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
-        try:
-            r = requests.get(url, headers=headers, timeout=4.0)
-            if r.status_code == 200:
-                payload = r.json()
-                results = payload.get("chart", {}).get("result", [])
-                if results:
-                    timestamps = results[0].get("timestamp", [])
-                    closes = results[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
-                    return sym, {
-                        ts: float(c) for ts, c in zip(timestamps, closes) if c is not None
-                    }
-        except Exception as e:
-            logger.warning(f"Error fetching intraday bars for {sym}: {e}")
-        return sym, {}
-
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        for sym, sym_quotes in pool.map(_fetch_sym_5m, contracts):
-            if sym_quotes:
-                quotes_by_contract[sym] = sym_quotes
-
-    if not quotes_by_contract.get("KCZ26"):
-        return existing_df if existing_df is not None else pd.DataFrame()
-
-    z_quotes = quotes_by_contract["KCZ26"]
-    h_quotes = quotes_by_contract.get("KCH27", {})
-    k_quotes = quotes_by_contract.get("KCK27", {})
-
-    last_h = 295.0
-    last_k = 290.0
-    rows = []
-
-    for ts in sorted(z_quotes.keys()):
-        dt_ny = datetime.fromtimestamp(ts, tz=NY_TZ)
-        if dt_ny.strftime("%Y-%m-%d") != today_str:
-            continue
-        if dt_ny.hour < 4 or (dt_ny.hour == 4 and dt_ny.minute < 15):
-            continue
-
-        z_px = round(z_quotes[ts], 2)
-        h_px = round(h_quotes.get(ts, last_h), 2)
-        k_px = round(k_quotes.get(ts, last_k), 2)
-        last_h = h_px
-        last_k = k_px
-
-        rows.append({
-            "datetime_ny": dt_ny.strftime("%Y-%m-%d %H:%M"),
-            "timestamp": int(ts),
-            "kcz26": z_px,
-            "kch27": h_px,
-            "kck27": k_px,
-            "spread_zh": round(z_px - h_px, 2),
-            "spread_hk": round(h_px - k_px, 2),
-        })
-
-    if not rows:
-        return existing_df if existing_df is not None else pd.DataFrame()
-
-    backfilled_df = pd.DataFrame(rows)
-
-    if existing_df is not None and not existing_df.empty:
-        combined = pd.concat([backfilled_df, existing_df], ignore_index=True)
-        combined = combined.drop_duplicates(subset=["datetime_ny"], keep="last")
-        combined = combined.sort_values("datetime_ny").reset_index(drop=True)
-    else:
-        combined = backfilled_df
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    combined.to_csv(path, index=False)
-    return combined
+            pass
+    return pd.DataFrame()
 
 
 def generate_intraday_5m_chart(

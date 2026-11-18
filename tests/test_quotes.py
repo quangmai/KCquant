@@ -17,41 +17,34 @@ def disable_cqg_in_unit_tests(monkeypatch):
     monkeypatch.setattr("kcquant.cqg.fetch_cqg_quotes", lambda *args, **kwargs: None)
 
 
-def test_fetch_live_contract_quote_mock_success():
-    mock_payload = {
-        "chart": {
-            "result": [
-                {
-                    "meta": {
-                        "regularMarketPrice": 292.50,
-                        "chartPreviousClose": 290.00,
-                        "regularMarketDayHigh": 293.00,
-                        "regularMarketDayLow": 289.50,
-                        "regularMarketVolume": 4200,
-                        "regularMarketTime": 1791888800,
-                    }
-                }
-            ]
+def test_fetch_live_contract_quote_mock_success(monkeypatch):
+    mock_cqg = {
+        "KCZ26": {
+            "contract": "KCZ26",
+            "cqg_symbol": "KCEZ26",
+            "price": 292.50,
+            "prev_close": 290.00,
+            "high": 293.00,
+            "low": 289.50,
+            "volume": 4200,
+            "datetime_ny": "2026-10-13 07:00 ET",
+            "time_str": "07:00 ET",
+            "source": "Live Market (CQG Desktop · 07:00 ET)",
         }
     }
-    with patch("requests.get") as mock_get:
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = mock_payload
-        mock_get.return_value = mock_resp
-
-        q = fetch_live_contract_quote("KCZ26")
-        assert q is not None
-        assert q["price"] == 292.50
-        assert q["prev_close"] == 290.00
-        assert q["high"] == 293.00
-        assert q["volume"] == 4200
+    monkeypatch.setattr("kcquant.cqg.fetch_cqg_quotes", lambda *args, **kwargs: mock_cqg)
+    q = fetch_live_contract_quote("KCZ26")
+    assert q is not None
+    assert q["price"] == 292.50
+    assert q["prev_close"] == 290.00
+    assert q["high"] == 293.00
+    assert q["volume"] == 4200
 
 
-def test_fetch_live_contract_quote_error():
-    with patch("requests.get", side_effect=Exception("Network error")):
-        q = fetch_live_contract_quote("KCZ26")
-        assert q is None
+def test_fetch_live_contract_quote_error(monkeypatch):
+    monkeypatch.setattr("kcquant.cqg.fetch_cqg_quotes", lambda *args, **kwargs: None)
+    q = fetch_live_contract_quote("KCZ26")
+    assert q is None
 
 
 def test_fetch_live_zh_quotes_mock():

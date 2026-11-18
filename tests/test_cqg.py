@@ -69,7 +69,7 @@ def test_fetch_cqg_quotes_missing_credentials(monkeypatch):
     assert fetch_cqg_quotes(["KCZ26", "KCH27"]) is None
 
 
-def test_quotes_fallback_when_cqg_unconfigured(monkeypatch):
+def test_quotes_returns_none_when_cqg_unconfigured(monkeypatch):
     import kcquant.cqg as cqg_mod
     monkeypatch.setattr(cqg_mod, "_ENV_LOADED", True)
     monkeypatch.delenv("CQG_USERNAME", raising=False)
@@ -77,30 +77,9 @@ def test_quotes_fallback_when_cqg_unconfigured(monkeypatch):
     monkeypatch.delenv("CQG_PASSWORD", raising=False)
     monkeypatch.delenv("CQG_PASS", raising=False)
 
-    # Calling fetch_live_contract_quote should not fail even without CQG
-    with patch("requests.get") as mock_get:
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = {
-            "chart": {
-                "result": [{
-                    "meta": {
-                        "regularMarketPrice": 304.50,
-                        "chartPreviousClose": 303.00,
-                        "regularMarketDayHigh": 306.00,
-                        "regularMarketDayLow": 302.00,
-                        "regularMarketVolume": 1000,
-                        "regularMarketTime": 1729600000
-                    }
-                }]
-            }
-        }
-        mock_get.return_value = mock_resp
-
-        q = fetch_live_contract_quote("KCZ26")
-        assert q is not None
-        assert q["price"] == 304.50
-        assert "Yahoo" in q["source"]
+    # Without CQG credentials, live quote returns None (Yahoo Finance removed)
+    q = fetch_live_contract_quote("KCZ26")
+    assert q is None
 
 
 def test_quotes_prioritizes_cqg_when_available():

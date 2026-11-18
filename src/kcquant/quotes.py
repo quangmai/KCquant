@@ -1,7 +1,7 @@
 """Dynamic price and quote resolution for KC Coffee futures.
 
 Supports:
-  1. Live real-time intraday market quotes via Yahoo Finance (ICE Coffee 'C' .NYB).
+  1. Live real-time intraday market quotes exclusively via CQG Desktop (with 1-2 retries).
   2. Official daily settlement history via Databento IFUS.IMPACT ohlcv-1d.
   3. Local cached settlement curve matrix (output/KC_databento_fixed_raw_curve.csv).
   4. Persistent status state (output/monitor/latest_prices.json).
@@ -14,7 +14,6 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 import pandas as pd
-import requests
 
 from kcquant.notify import load_env
 
@@ -22,67 +21,27 @@ ROOT = Path(__file__).resolve().parents[2]
 NY_TZ = ZoneInfo("America/New_York")
 
 
-def fetch_live_contract_quote(contract: str, timeout: float = 6.0) -> dict | None:
-    """Fetch live intraday market quote for an ICE Coffee 'C' contract (e.g. 'KCZ26' -> 'KCZ26.NYB').
+def fetch_live_contract_quote(contract: str, timeout: float = 6.0, max_retries: int = 2) -> dict | None:
+    """Fetch live intraday market quote for an ICE Coffee 'C' contract from CQG Desktop.
 
-    Prioritizes CQG Desktop if credentials are configured in .env, with automatic fallback
-    to Yahoo Finance.
+    Retries 1-2 times if CQG fails; returns None if CQG quote cannot be retrieved.
     """
-    # 1. Attempt CQG Desktop if credentials configured
+    clean = contract.replace(".NYB", "").strip().upper()
     try:
         from kcquant.cqg import fetch_cqg_quotes
-        cqg_res = fetch_cqg_quotes([contract])
-        if cqg_res and contract in cqg_res:
-            return cqg_res[contract]
+        cqg_res = fetch_cqg_quotes([clean], max_retries=max_retries)
+        if cqg_res and clean in cqg_res:
+            return cqg_res[clean]
     except Exception:
         pass
-
-    # 2. Yahoo Finance fallback
-    ticker = f"{contract}.NYB" if not contract.endswith(".NYB") else contract
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=1m&range=1d"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko)"
-    }
-
-    try:
-        resp = requests.get(url, headers=headers, timeout=timeout)
-        if resp.status_code != 200:
-            return None
-        payload = resp.json()
-        results = payload.get("chart", {}).get("result")
-        if not results:
-            return None
-        meta = results[0].get("meta", {})
-        price = meta.get("regularMarketPrice")
-        if price is None:
-            return None
-
-        ts = meta.get("regularMarketTime")
-        dt_ny = datetime.fromtimestamp(ts, tz=NY_TZ) if ts else datetime.now(NY_TZ)
-
-        return {
-            "contract": contract,
-            "ticker": ticker,
-            "price": float(price),
-            "prev_close": float(meta.get("chartPreviousClose", price)),
-            "high": float(meta.get("regularMarketDayHigh", price)) if meta.get("regularMarketDayHigh") is not None else float(price),
-            "low": float(meta.get("regularMarketDayLow", price)) if meta.get("regularMarketDayLow") is not None else float(price),
-            "volume": int(meta.get("regularMarketVolume", 0)) if meta.get("regularMarketVolume") is not None else 0,
-            "timestamp": ts,
-            "datetime_ny": dt_ny.strftime("%Y-%m-%d %H:%M ET"),
-            "time_str": dt_ny.strftime("%H:%M ET"),
-            "source": f"Live Market (ICE / Yahoo · {dt_ny.strftime('%H:%M ET')})"
-        }
-    except Exception:
-        return None
+    return None
 
 
-def fetch_live_zh_quotes() -> dict | None:
-    """Fetch concurrent live quotes for KCZ26 and KCH27."""
-    # 1. Attempt batch CQG Desktop fetch first
+def fetch_live_zh_quotes(max_retries: int = 2) -> dict | None:
+    """Fetch concurrent live CQG quotes for KCZ26 and KCH27."""
     try:
         from kcquant.cqg import fetch_cqg_quotes
-        cqg_res = fetch_cqg_quotes(["KCZ26", "KCH27"])
+        cqg_res = fetch_cqg_quotes(["KCZ26", "KCH27"], max_retries=max_retries)
         if cqg_res and "KCZ26" in cqg_res and "KCH27" in cqg_res:
             z_q = cqg_res["KCZ26"]
             h_q = cqg_res["KCH27"]
@@ -109,16 +68,15 @@ def fetch_live_zh_quotes() -> dict | None:
         "kch27": h_q,
         "spread_cents": spread,
         "quote_time_ny": z_q["datetime_ny"],
-        "source": z_q.get("source", f"Live Market (ICE / Yahoo · {z_q['time_str']})")
+        "source": z_q.get("source", f"Live Market (CQG Desktop · {z_q['time_str']})")
     }
 
 
-def fetch_live_curve_quotes() -> dict | None:
-    """Fetch concurrent live quotes for KCZ26, KCH27, and KCK27, computing Z/H and H/K spreads."""
-    # 1. Attempt batch CQG Desktop fetch first
+def fetch_live_curve_quotes(max_retries: int = 2) -> dict | None:
+    """Fetch concurrent live CQG quotes for KCZ26, KCH27, and KCK27 (retrying up to max_retries)."""
     try:
         from kcquant.cqg import fetch_cqg_quotes
-        cqg_res = fetch_cqg_quotes(["KCZ26", "KCH27", "KCK27"])
+        cqg_res = fetch_cqg_quotes(["KCZ26", "KCH27", "KCK27"], max_retries=max_retries)
         if cqg_res and "KCZ26" in cqg_res and "KCH27" in cqg_res and "KCK27" in cqg_res:
             z_q = cqg_res["KCZ26"]
             h_q = cqg_res["KCH27"]
@@ -136,31 +94,7 @@ def fetch_live_curve_quotes() -> dict | None:
             }
     except Exception:
         pass
-
-    # 2. Concurrent live fetch fallback
-    from concurrent.futures import ThreadPoolExecutor
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        f_z = pool.submit(fetch_live_contract_quote, "KCZ26")
-        f_h = pool.submit(fetch_live_contract_quote, "KCH27")
-        f_k = pool.submit(fetch_live_contract_quote, "KCK27")
-        z_q = f_z.result()
-        h_q = f_h.result()
-        k_q = f_k.result()
-
-    if z_q is None or h_q is None or k_q is None:
-        return None
-
-    spread_zh = round(z_q["price"] - h_q["price"], 2)
-    spread_hk = round(h_q["price"] - k_q["price"], 2)
-    return {
-        "kcz26": z_q,
-        "kch27": h_q,
-        "kck27": k_q,
-        "spread_zh": spread_zh,
-        "spread_hk": spread_hk,
-        "quote_time_ny": z_q["datetime_ny"],
-        "source": z_q.get("source", f"Live Market (ICE / Yahoo · {z_q['time_str']})")
-    }
+    return None
 
 
 def sync_databento_settles(raw_curve_file: Path | None = None) -> bool:
@@ -377,15 +311,17 @@ def get_latest_kc_curve_prices(
             "spread_zh": round(z_override - h_override, 2),
             "spread_hk": round(h_override - k_override, 2),
             "price_source": src,
-            "quote_time_ny": datetime.now(NY_TZ).strftime("%Y-%m-%d %H:%M ET")
+            "quote_time_ny": datetime.now(NY_TZ).strftime("%Y-%m-%d %H:%M ET"),
+            "cqg_ok": True,
         }
         with open(cache_json, "w") as f:
             json.dump(res, f, indent=2)
         return res
 
-    # 2. Live Market Quotes
+    # 2. Live CQG Market Quotes (exclusively from CQG Desktop with 2 retries)
+    cqg_failed = False
     if prefer_live:
-        live = fetch_live_curve_quotes()
+        live = fetch_live_curve_quotes(max_retries=2)
         if live is not None:
             z_px = live["kcz26"]["price"]
             h_px = live["kch27"]["price"]
@@ -398,17 +334,30 @@ def get_latest_kc_curve_prices(
                 "spread_hk": live["spread_hk"],
                 "price_source": live["source"],
                 "quote_time_ny": live["quote_time_ny"],
-                "live_meta": live
+                "live_meta": live,
+                "cqg_ok": True,
             }
             with open(cache_json, "w") as f:
                 json.dump(res, f, indent=2)
             return res
+        cqg_failed = True
+        if cache_json.exists():
+            try:
+                with open(cache_json) as f:
+                    cached = json.load(f)
+                if "kcz26" in cached and "kch27" in cached and "kck27" in cached:
+                    cached["cqg_ok"] = False
+                    cached["cqg_error"] = "CQG Desktop price fetch failed after 2 retries"
+                    return cached
+            except Exception:
+                pass
 
-    # 3. Check Databento settles
-    try:
-        sync_databento_settles(raw_path)
-    except Exception:
-        pass
+    # 3. Check Databento settles (only when settle-only mode is requested)
+    if not prefer_live:
+        try:
+            sync_databento_settles(raw_path)
+        except Exception:
+            pass
 
     # 4. Check local CSV raw curve
     if raw_path.exists():
@@ -430,7 +379,9 @@ def get_latest_kc_curve_prices(
                     "spread_hk": round(h_px - k_px, 2),
                     "price_source": f"Settlement Settle ({dt_str})",
                     "quote_time_ny": f"{dt_str} Close",
-                    "trade_date": dt_str
+                    "trade_date": dt_str,
+                    "cqg_ok": not cqg_failed,
+                    "cqg_error": "CQG Desktop price fetch failed after 2 retries" if cqg_failed else None,
                 }
                 with open(cache_json, "w") as f:
                     json.dump(res, f, indent=2)
@@ -447,5 +398,7 @@ def get_latest_kc_curve_prices(
         "spread_zh": round(z_fallback - h_fallback, 2),
         "spread_hk": round(h_fallback - k_fallback, 2),
         "price_source": "Baseline Default",
-        "quote_time_ny": "N/A"
+        "quote_time_ny": "N/A",
+        "cqg_ok": not cqg_failed,
+        "cqg_error": "CQG Desktop price fetch failed after 2 retries" if cqg_failed else None,
     }

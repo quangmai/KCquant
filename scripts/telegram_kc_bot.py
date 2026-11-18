@@ -96,8 +96,15 @@ def format_telegram_html(data: dict, is_forced: bool = False) -> str:
         f"━━━━━━━━━━━━━━━━━━━━\n"
     )
 
+    cqg_ok = data.get("cqg_ok", True)
+    status_line = (
+        f"⚠️ <b>CQG Status:</b> <code>{data.get('cqg_error', 'Unavailable after 2 retries')} (Showing last cached CQG price)</code>\n"
+        if not cqg_ok else ""
+    )
+
     prices_section = (
         f"📊 <b>KC Futures Prices (H27 Focus):</b>\n"
+        f"{status_line}"
         f"• <b>⭐ KCH27 (Mar 27): <code>{data['kch27_price']:.2f}¢</code></b>\n"
         f"• KCZ26 (Dec 26) [Ref]: <code>{data['kcz26_price']:.2f}¢</code>\n"
         f"• KCK27 (May 27) [Ref]: <code>{data['kck27_price']:.2f}¢</code>\n"
@@ -165,8 +172,11 @@ def run_telegram_update(force: bool = False, z_price: float | None = None,
         fetch_dur_ms = int((time.time() - t_start) * 1000)
         result = evaluate_market_data(prices, cert_df)
         result["fetch_duration_ms"] = fetch_dur_ms
+        result["cqg_ok"] = prices.get("cqg_ok", True)
+        result["cqg_error"] = prices.get("cqg_error")
         persist_results(result, monitor_dir)
-        record_cqg_intraday_snapshot(result)
+        if result["cqg_ok"]:
+            record_cqg_intraday_snapshot(result)
 
         if s_idx < samples - 1:
             time.sleep(sample_interval)

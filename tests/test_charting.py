@@ -48,8 +48,8 @@ def test_record_cqg_intraday_snapshot(tmp_path):
     assert df["spread_zh"].iloc[0] == 13.40
 
 
-def test_get_prev_day_range_fallback():
-    with patch("requests.get", side_effect=Exception("Network error")):
+def test_get_prev_day_range_fallback(tmp_path):
+    with patch("kcquant.charting.ROOT", tmp_path):
         res = get_prev_day_range("KCZ26")
         assert res is not None
         assert res["contract"] == "KCZ26"
@@ -58,32 +58,25 @@ def test_get_prev_day_range_fallback():
         assert res["high"] >= res["low"]
 
 
-def test_get_prev_day_range_yahoo(tmp_path):
-    mock_payload = {
-        "chart": {
-            "result": [{
-                "timestamp": [1792468800, 1792555200],  # 2026-10-20, 2026-10-21
-                "indicators": {
-                    "quote": [{
-                        "high": [318.20, 317.90],
-                        "low": [309.20, 308.35],
-                        "close": [311.30, 316.15]
-                    }]
-                }
-            }]
-        }
-    }
-    with patch("requests.get") as mock_get, patch("kcquant.charting.ROOT", tmp_path):
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.json.return_value = mock_payload
-        mock_get.return_value = mock_resp
+def test_get_prev_day_range_from_cqg_history(tmp_path):
+    monitor_dir = tmp_path / "output" / "monitor"
+    monitor_dir.mkdir(parents=True, exist_ok=True)
+    csv_file = monitor_dir / "kc_cqg_intraday_5m.csv"
+    rows = [
+        {"datetime_ny": "2026-10-21 09:00", "timestamp": 1729515600, "kcz26": 308.35, "kch27": 292.10, "kck27": 287.00, "spread_zh": 16.25, "spread_hk": 5.10},
+        {"datetime_ny": "2026-10-21 10:30", "timestamp": 1729521000, "kcz26": 317.90, "kch27": 298.40, "kck27": 293.00, "spread_zh": 19.50, "spread_hk": 5.40},
+        {"datetime_ny": "2026-10-21 13:25", "timestamp": 1729531500, "kcz26": 316.15, "kch27": 296.80, "kck27": 291.50, "spread_zh": 19.35, "spread_hk": 5.30},
+        {"datetime_ny": "2026-10-22 04:15", "timestamp": 1729584900, "kcz26": 315.00, "kch27": 295.50, "kck27": 290.20, "spread_zh": 19.50, "spread_hk": 5.30},
+    ]
+    pd.DataFrame(rows).to_csv(csv_file, index=False)
 
+    with patch("kcquant.charting.ROOT", tmp_path):
         res = get_prev_day_range("KCZ26", target_date="2026-10-22")
         assert res is not None
         assert res["date"] == "2026-10-21"
         assert res["high"] == 317.90
         assert res["low"] == 308.35
+        assert res["close"] == 316.15
 
 
 

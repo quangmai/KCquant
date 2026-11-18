@@ -1,11 +1,11 @@
 {
-  "timestamp": "2026-11-18T17:56:19.763783",
+  "timestamp": "2026-11-18T17:57:03.582966",
   "as_of_report_date": "2026-11-17",
   "kcz26_price": 282.0,
-  "kch27_price": 276.8,
+  "kch27_price": 277.1,
   "kck27_price": 270.35,
-  "spread_zh_cents": 5.2,
-  "spread_hk_cents": 6.45,
+  "spread_zh_cents": 4.9,
+  "spread_hk_cents": 6.75,
   "price_source": "Live Market (ICE / Yahoo \u00b7 12:36 ET)",
   "quote_time_ny": "2026-11-18 12:36 ET",
   "certified_stocks_bags": 194523,
@@ -23,5 +23,5 @@
   "last_grading_failed": 1695,
   "last_grading_rate": 87.4,
   "total_pipeline_bags": 407482,
-  "fetch_duration_ms": 135
+  "fetch_duration_ms": 139
 }

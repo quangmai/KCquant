@@ -1,9 +1,9 @@
 {
   "kcz26": 282.0,
-  "kch27": 276.8,
+  "kch27": 277.1,
   "kck27": 270.35,
-  "spread_zh": 5.2,
-  "spread_hk": 6.45,
+  "spread_zh": 4.9,
+  "spread_hk": 6.75,
   "price_source": "Live Market (ICE / Yahoo \u00b7 12:36 ET)",
   "quote_time_ny": "2026-11-18 12:36 ET",
   "live_meta": {
@@ -23,12 +23,12 @@
     "kch27": {
       "contract": "KCH27",
       "ticker": "KCH27.NYB",
-      "price": 276.8,
+      "price": 277.1,
       "prev_close": 281.4,
       "high": 280.45,
       "low": 272.05,
-      "volume": 18604,
-      "timestamp": 1795023377,
+      "volume": 18632,
+      "timestamp": 1795023411,
       "datetime_ny": "2026-11-18 12:36 ET",
       "time_str": "12:36 ET",
       "source": "Live Market (ICE / Yahoo \u00b7 12:36 ET)"
@@ -40,14 +40,14 @@
       "prev_close": 275.35,
       "high": 273.7,
       "low": 265.65,
-      "volume": 6821,
-      "timestamp": 1795023343,
-      "datetime_ny": "2026-11-18 12:35 ET",
-      "time_str": "12:35 ET",
-      "source": "Live Market (ICE / Yahoo \u00b7 12:35 ET)"
+      "volume": 6824,
+      "timestamp": 1795023401,
+      "datetime_ny": "2026-11-18 12:36 ET",
+      "time_str": "12:36 ET",
+      "source": "Live Market (ICE / Yahoo \u00b7 12:36 ET)"
     },
-    "spread_zh": 5.2,
-    "spread_hk": 6.45,
+    "spread_zh": 4.9,
+    "spread_hk": 6.75,
     "quote_time_ny": "2026-11-18 12:36 ET",
     "source": "Live Market (ICE / Yahoo \u00b7 12:36 ET)"
   }

@@ -73,25 +73,55 @@ def fetch_live_zh_quotes(max_retries: int = 2) -> dict | None:
 
 
 def fetch_live_curve_quotes(max_retries: int = 2) -> dict | None:
-    """Fetch concurrent live CQG quotes for KCZ26, KCH27, and KCK27 (retrying up to max_retries)."""
+    """Fetch concurrent live CQG quotes for KCH27, KCK27 (and KCZ26 / KCN27) from CQG Desktop."""
     try:
         from kcquant.cqg import fetch_cqg_quotes
-        cqg_res = fetch_cqg_quotes(["KCZ26", "KCH27", "KCK27"], max_retries=max_retries)
-        if cqg_res and "KCZ26" in cqg_res and "KCH27" in cqg_res and "KCK27" in cqg_res:
-            z_q = cqg_res["KCZ26"]
+        cqg_res = fetch_cqg_quotes(["KCZ26", "KCH27", "KCK27", "KCN27"], max_retries=max_retries)
+        if cqg_res and "KCH27" in cqg_res and "KCK27" in cqg_res:
             h_q = cqg_res["KCH27"]
             k_q = cqg_res["KCK27"]
+
+            if "KCZ26" in cqg_res:
+                z_q = cqg_res["KCZ26"]
+            else:
+                # If CQG QSS watchlist has rolled from Z26 to [H27, K27, N27], preserve last reference Z26
+                ref_z_px = round(h_q["price"] + 6.00, 2)
+                cache_json = ROOT / "output" / "monitor" / "latest_kc_curve_prices.json"
+                if cache_json.exists():
+                    try:
+                        with open(cache_json) as f:
+                            cached = json.load(f)
+                        if "kcz26" in cached and float(cached["kcz26"]) > 0:
+                            ref_z_px = float(cached["kcz26"])
+                    except Exception:
+                        pass
+                z_q = {
+                    "contract": "KCZ26",
+                    "cqg_symbol": "KCEZ26",
+                    "price": ref_z_px,
+                    "prev_close": ref_z_px,
+                    "high": ref_z_px,
+                    "low": ref_z_px,
+                    "volume": 0,
+                    "datetime_ny": h_q["datetime_ny"],
+                    "time_str": h_q["time_str"],
+                    "source": h_q["source"],
+                }
+
             spread_zh = round(z_q["price"] - h_q["price"], 2)
             spread_hk = round(h_q["price"] - k_q["price"], 2)
-            return {
+            res = {
                 "kcz26": z_q,
                 "kch27": h_q,
                 "kck27": k_q,
                 "spread_zh": spread_zh,
                 "spread_hk": spread_hk,
-                "quote_time_ny": z_q["datetime_ny"],
-                "source": f"Live Market (CQG Desktop · {z_q['time_str']})"
+                "quote_time_ny": h_q["datetime_ny"],
+                "source": f"Live Market (CQG Desktop · {h_q['time_str']})"
             }
+            if "KCN27" in cqg_res:
+                res["kcn27"] = cqg_res["KCN27"]
+            return res
     except Exception:
         pass
     return None

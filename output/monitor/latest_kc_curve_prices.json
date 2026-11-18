@@ -1,54 +1,54 @@
 {
-  "kcz26": 280.05,
-  "kch27": 274.95,
-  "kck27": 268.25,
-  "spread_zh": 5.1,
-  "spread_hk": 6.7,
-  "price_source": "Live Market (ICE / Yahoo \u00b7 12:22 ET)",
-  "quote_time_ny": "2026-11-18 12:22 ET",
+  "kcz26": 281.05,
+  "kch27": 275.65,
+  "kck27": 269.0,
+  "spread_zh": 5.4,
+  "spread_hk": 6.65,
+  "price_source": "Live Market (ICE / Yahoo \u00b7 12:23 ET)",
+  "quote_time_ny": "2026-11-18 12:23 ET",
   "live_meta": {
     "kcz26": {
       "contract": "KCZ26",
       "ticker": "KCZ26.NYB",
-      "price": 280.05,
+      "price": 281.05,
       "prev_close": 286.6,
       "high": 284.65,
       "low": 275.65,
-      "volume": 4473,
-      "timestamp": 1795022537,
-      "datetime_ny": "2026-11-18 12:22 ET",
-      "time_str": "12:22 ET",
-      "source": "Live Market (ICE / Yahoo \u00b7 12:22 ET)"
+      "volume": 4486,
+      "timestamp": 1795022630,
+      "datetime_ny": "2026-11-18 12:23 ET",
+      "time_str": "12:23 ET",
+      "source": "Live Market (ICE / Yahoo \u00b7 12:23 ET)"
     },
     "kch27": {
       "contract": "KCH27",
       "ticker": "KCH27.NYB",
-      "price": 274.95,
+      "price": 275.65,
       "prev_close": 281.4,
       "high": 280.45,
       "low": 272.05,
-      "volume": 17076,
-      "timestamp": 1795022542,
-      "datetime_ny": "2026-11-18 12:22 ET",
-      "time_str": "12:22 ET",
-      "source": "Live Market (ICE / Yahoo \u00b7 12:22 ET)"
+      "volume": 17413,
+      "timestamp": 1795022632,
+      "datetime_ny": "2026-11-18 12:23 ET",
+      "time_str": "12:23 ET",
+      "source": "Live Market (ICE / Yahoo \u00b7 12:23 ET)"
     },
     "kck27": {
       "contract": "KCK27",
       "ticker": "KCK27.NYB",
-      "price": 268.25,
+      "price": 269.0,
       "prev_close": 275.35,
       "high": 273.7,
       "low": 265.65,
-      "volume": 6100,
-      "timestamp": 1795022542,
-      "datetime_ny": "2026-11-18 12:22 ET",
-      "time_str": "12:22 ET",
-      "source": "Live Market (ICE / Yahoo \u00b7 12:22 ET)"
+      "volume": 6239,
+      "timestamp": 1795022630,
+      "datetime_ny": "2026-11-18 12:23 ET",
+      "time_str": "12:23 ET",
+      "source": "Live Market (ICE / Yahoo \u00b7 12:23 ET)"
     },
-    "spread_zh": 5.1,
-    "spread_hk": 6.7,
-    "quote_time_ny": "2026-11-18 12:22 ET",
-    "source": "Live Market (ICE / Yahoo \u00b7 12:22 ET)"
+    "spread_zh": 5.4,
+    "spread_hk": 6.65,
+    "quote_time_ny": "2026-11-18 12:23 ET",
+    "source": "Live Market (ICE / Yahoo \u00b7 12:23 ET)"
   }
 }

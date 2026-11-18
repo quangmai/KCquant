@@ -58,10 +58,10 @@ def test_format_telegram_html_clean_structure():
 
     html = format_telegram_html(sample_data)
 
-    # Must contain prices and both spreads
-    assert "KCZ26 (Dec 26): <code>305.00¢</code>" in html
+    # Must contain prices and both spreads (with H27 Focus and Z26/K27 Ref)
     assert "KCH27 (Mar 27): <code>292.25¢</code>" in html
-    assert "KCK27 (May 27): <code>287.35¢</code>" in html
+    assert "KCZ26 (Dec 26) [Ref]: <code>305.00¢</code>" in html
+    assert "KCK27 (May 27) [Ref]: <code>287.35¢</code>" in html
     assert "<b>Z26 / H27 Spread:</b> <code>+12.75¢</code>" in html
     assert "<b>H27 / K27 Spread:</b> <code>+4.90¢</code>" in html
 

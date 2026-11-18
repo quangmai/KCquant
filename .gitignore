@@ -23,12 +23,11 @@ output/monitor/*.log
 output/monitor/*.png
 output/*.parquet
 
-# Track persistent monitor history & order logs
+# Track persistent monitor history
 !output/monitor/kc_cqg_intraday_5m.csv
 !output/monitor/kc_market_history.csv
 !output/monitor/kc_telegram_log.jsonl
 !output/monitor/zh_spread_history.csv
-!output/orders/*
 
 
 # IDE / Editor files

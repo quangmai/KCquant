@@ -78,8 +78,8 @@ jobs:
       - name: Sync Final State to Main Branch
         if: always()
         run: |
-          git add -f output/monitor/ output/orders/ || true
-          git commit -m "Auto-sync positions and orders at runner handover [skip ci]" || echo "No changes to commit"
+          git add -f output/monitor/ || true
+          git commit -m "Auto-sync monitor history at runner handover [skip ci]" || echo "No changes to commit"
           git pull --rebase origin main || true
           git push origin main || echo "Push skipped"
 

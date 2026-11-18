@@ -366,11 +366,14 @@ def process_telegram_control_commands(
     return next_offset, trigger_now
 
 
-def sync_state_to_git(commit_message: str) -> None:
-    """Commit and push monitor state if running in GitHub Actions or explicitly enabled."""
-    if os.environ.get("GITHUB_ACTIONS") != "true" and os.environ.get("ENABLE_GIT_SYNC") != "1":
-        return
+import threading
 
+_GIT_SYNC_LOCK = threading.Lock()
+
+
+def _run_git_sync_worker(commit_message: str) -> None:
+    if not _GIT_SYNC_LOCK.acquire(blocking=False):
+        return
     try:
         import subprocess
         git_env = os.environ.copy()
@@ -385,10 +388,21 @@ def sync_state_to_git(commit_message: str) -> None:
             subprocess.run(["git", "config", "user.email", "github-actions[bot]@users.noreply.github.com"], cwd=str(ROOT), check=False, timeout=5, env=git_env)
             subprocess.run(["git", "add", "output/monitor/"], cwd=str(ROOT), check=False, timeout=10, env=git_env)
             subprocess.run(["git", "commit", "-m", commit_message], cwd=str(ROOT), check=False, timeout=10, env=git_env)
-            subprocess.run(["git", "pull", "--rebase", "origin", "main"], cwd=str(ROOT), check=False, timeout=15, env=git_env)
+            subprocess.run(["git", "pull", "--rebase", "-X", "ours", "origin", "main"], cwd=str(ROOT), check=False, timeout=15, env=git_env)
             subprocess.run(["git", "push", "origin", "main"], cwd=str(ROOT), check=False, timeout=15, env=git_env)
     except Exception as e:
-        print(f"[!] Git sync notice: {e}")
+        print(f"[!] Git sync notice: {e}", flush=True)
+    finally:
+        _GIT_SYNC_LOCK.release()
+
+
+def sync_state_to_git(commit_message: str) -> None:
+    """Asynchronously commit and push monitor state in background if running in GitHub Actions."""
+    if os.environ.get("GITHUB_ACTIONS") != "true" and os.environ.get("ENABLE_GIT_SYNC") != "1":
+        return
+
+    t = threading.Thread(target=_run_git_sync_worker, args=(commit_message,), daemon=True)
+    t.start()
 
 
 def main():

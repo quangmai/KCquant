@@ -39,8 +39,18 @@ from kcquant.quotes import get_latest_kc_curve_prices
 from fetch_cert_stocks import fetch
 
 
-def download_latest_reports(stock_dir: Path, days_back: int = 5) -> list[pd.Timestamp]:
-    """Attempt to download recent daily reports up to today."""
+_LAST_CERT_DOWNLOAD_TS: float = 0.0
+_CERT_DOWNLOAD_INTERVAL_SEC: float = 2700.0  # 45 minutes
+
+
+def download_latest_reports(stock_dir: Path, days_back: int = 5, force_check: bool = False) -> list[pd.Timestamp]:
+    """Attempt to download recent daily reports up to today (throttled to avoid redundant 15m probes)."""
+    global _LAST_CERT_DOWNLOAD_TS
+    import time
+    now_ts = time.time()
+    if not force_check and (now_ts - _LAST_CERT_DOWNLOAD_TS) < _CERT_DOWNLOAD_INTERVAL_SEC:
+        return []
+
     stock_dir.mkdir(parents=True, exist_ok=True)
     today = pd.Timestamp.now().normalize()
     recent_bdays = pd.date_range(end=today, periods=days_back, freq=KC.cal.bday)
@@ -50,9 +60,11 @@ def download_latest_reports(stock_dir: Path, days_back: int = 5) -> list[pd.Time
     for day in recent_bdays:
         xls_file = stock_dir / f"coffee_cert_stock_{day:%Y%m%d}.xls"
         if not xls_file.exists():
-            day_res, status, size = fetch(day, stock_dir, session, retries=2, verbose=False)
+            day_res, status, size = fetch(day, stock_dir, session, retries=1, timeout=4.0, verbose=False)
             if status == "ok":
                 downloaded.append(day)
+
+    _LAST_CERT_DOWNLOAD_TS = time.time()
     return downloaded
 
 

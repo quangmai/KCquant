@@ -159,11 +159,11 @@ def get_warm_cqg_driver(force_restart: bool = False):
         from selenium.webdriver.support.ui import WebDriverWait
         from selenium.webdriver.support import expected_conditions as EC
 
-        timeout = creds["timeout"]
-        driver.set_page_load_timeout(timeout + 10)
+        timeout = min(creds["timeout"], 10.0)
+        driver.set_page_load_timeout(timeout + 6)
         driver.get(creds["url"])
         wait = WebDriverWait(driver, timeout)
-        time.sleep(2)
+        time.sleep(0.8)
 
         if "logon" in driver.current_url.lower() or driver.find_elements(By.NAME, "userName"):
             user_input = wait.until(EC.presence_of_element_located((By.NAME, "userName")))
@@ -186,11 +186,16 @@ def get_warm_cqg_driver(force_restart: bool = False):
             else:
                 pass_input.submit()
 
-            for _ in range(int(timeout * 2)):
-                time.sleep(0.5)
+            for _ in range(int(timeout * 4)):
+                time.sleep(0.25)
                 if "desktop/main" in driver.current_url:
                     break
-            time.sleep(3)
+
+            # Fast poll for QSS quotes widget instead of fixed 3s sleep
+            for _ in range(12):
+                time.sleep(0.25)
+                if driver.find_elements(By.TAG_NAME, "wpfe-quote-spread-sheet"):
+                    break
 
         _SHARED_DRIVER = driver
         return _SHARED_DRIVER
@@ -203,6 +208,10 @@ def get_warm_cqg_driver(force_restart: bool = False):
         return None
 
 
+_LAST_CQG_FAIL_TS: float = 0.0
+_CQG_FAIL_COOLDOWN_SEC: float = 15.0
+
+
 def fetch_instant_cqg_quote(contract: str = "KCZ26") -> dict | None:
     """Instantly fetch real-time quote for a contract from CQG Desktop.
 
@@ -210,31 +219,9 @@ def fetch_instant_cqg_quote(contract: str = "KCZ26") -> dict | None:
     with sub-second execution latency.
     """
     clean = contract.replace(".NYB", "").upper()
-    driver = get_warm_cqg_driver()
-    now_ny = datetime.now(NY_TZ)
-    time_str = now_ny.strftime("%H:%M:%S ET")
-    datetime_str = now_ny.strftime("%Y-%m-%d %H:%M:%S ET")
-
-    if driver is not None:
-        try:
-            quotes = _extract_qss_quotes(driver, now_ny, time_str, datetime_str)
-            if quotes and clean in quotes:
-                return quotes[clean]
-
-            cqg_sym = to_cqg_symbol(clean)
-            quote = _extract_quote_for_symbol(driver, cqg_sym, clean, now_ny, time_str, datetime_str)
-            if quote:
-                return quote
-        except Exception as e:
-            logger.warning(f"Error during warm CQG read: {e}, attempting restart")
-            driver = get_warm_cqg_driver(force_restart=True)
-            if driver:
-                try:
-                    quotes = _extract_qss_quotes(driver, now_ny, time_str, datetime_str)
-                    if quotes and clean in quotes:
-                        return quotes[clean]
-                except Exception:
-                    pass
+    res = fetch_cqg_quotes([clean])
+    if res and clean in res:
+        return res[clean]
 
     # Fallback to standalone live contract fetch
     from kcquant.quotes import fetch_live_contract_quote
@@ -242,127 +229,59 @@ def fetch_instant_cqg_quote(contract: str = "KCZ26") -> dict | None:
 
 
 def fetch_cqg_quotes(contracts: list[str] | None = None) -> dict[str, dict] | None:
-    """Log in to CQG Desktop and extract price quotes for requested contracts.
+    """Extract price quotes for requested contracts from the warm CQG Desktop session.
 
-    Parameters
-    ----------
-    contracts : list of ICE contract codes, e.g. ["KCZ26", "KCH27", "KCK27"]
-                Defaults to ["KCZ26", "KCH27", "KCK27"].
-
-    Returns
-    -------
-    dict mapping ICE symbol -> quote dict, or None if credentials missing / unavailable.
+    Reuses the persistent warm headless Chrome driver (`_SHARED_DRIVER`) so quote reads
+    complete in < 200ms rather than cold-booting a browser on every call.
     """
+    global _LAST_CQG_FAIL_TS
     creds = get_cqg_credentials()
     if not creds:
+        return None
+
+    # Short-circuit if CQG just failed within the last 15s (prevents 4x cascading retries in one cycle)
+    if (time.time() - _LAST_CQG_FAIL_TS) < _CQG_FAIL_COOLDOWN_SEC:
         return None
 
     target_contracts = contracts or ["KCZ26", "KCH27", "KCK27"]
     cqg_targets = {c: to_cqg_symbol(c) for c in target_contracts}
 
-    driver = _create_headless_driver()
+    driver = get_warm_cqg_driver()
     if driver is None:
+        _LAST_CQG_FAIL_TS = time.time()
         return None
 
     try:
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
-
-        timeout = creds["timeout"]
-        driver.set_page_load_timeout(timeout + 10)
-        driver.get(creds["url"])
-
-        # Wait for page elements to render
-        wait = WebDriverWait(driver, timeout)
-
-        # Check if on logon page
-        time.sleep(3)
-        current_url = driver.current_url.lower()
-
-        if "logon" in current_url or driver.find_elements(By.NAME, "userName"):
-            user_input = wait.until(EC.presence_of_element_located((By.NAME, "userName")))
-            pass_input = driver.find_element(By.NAME, "password")
-
-            user_input.clear()
-            user_input.send_keys(creds["username"])
-            pass_input.clear()
-            pass_input.send_keys(creds["password"])
-
-            # Submit form
-            submit_btn = None
-            for btn in driver.find_elements(By.TAG_NAME, "button"):
-                text = (btn.text or "").strip().lower()
-                btype = btn.get_attribute("type")
-                if "log on" in text or "login" in text or btype == "submit":
-                    submit_btn = btn
-                    break
-
-            if submit_btn:
-                submit_btn.click()
-            else:
-                pass_input.submit()
-
-            # Poll for logon redirect into desktop/main
-            for _ in range(int(timeout * 2)):
-                time.sleep(0.5)
-                if "desktop/main" in driver.current_url:
-                    break
-
-            # Give DOM and streaming WebSocket 3 seconds to populate prices
-            time.sleep(3)
-
-        # Inspect if login failed
-        page_source = driver.page_source.lower()
-        if "invalid username or password" in page_source or "authentication failed" in page_source:
-            logger.error("CQG Desktop logon rejected: Invalid credentials or authentication failed.")
-            return None
-
-        # Wait for QSS element or main quotes table to be present
-        try:
-            wait.until(
-                EC.presence_of_element_located((
-                    By.XPATH,
-                    '//*[contains(@class, "wpfe-quotes")] | //wpfe-quote-spread-sheet'
-                ))
-            )
-            time.sleep(2)
-        except Exception:
-            pass
-
-        # Look for quote board / tables / watchlist elements
         now_ny = datetime.now(NY_TZ)
         time_str = now_ny.strftime("%H:%M ET")
         datetime_str = now_ny.strftime("%Y-%m-%d %H:%M ET")
 
-        # 1. Primary extractor: Parse CQG Desktop QSS (Quote SpreadSheet)
+        # 1. Primary extractor: Parse CQG Desktop QSS (Quote SpreadSheet) from warm DOM
         qss_results = _extract_qss_quotes(driver, now_ny, time_str, datetime_str)
         if qss_results:
-            # Filter for requested targets
             matched = {k: v for k, v in qss_results.items() if k in target_contracts}
-            if len(matched) > 0:
+            if len(matched) == len(target_contracts):
                 return matched
 
-        results: dict[str, dict] = {}
-
-        # 2. Secondary fallback extractor: search individual table rows or text containers
+        results: dict[str, dict] = dict(qss_results or {})
         for ice_sym, cqg_sym in cqg_targets.items():
-            quote = _extract_quote_for_symbol(driver, cqg_sym, ice_sym, now_ny, time_str, datetime_str)
-            if quote:
-                results[ice_sym] = quote
+            if ice_sym not in results:
+                quote = _extract_quote_for_symbol(driver, cqg_sym, ice_sym, now_ny, time_str, datetime_str)
+                if quote:
+                    results[ice_sym] = quote
 
-        if len(results) > 0:
-            return results
+        matched = {k: v for k, v in results.items() if k in target_contracts}
+        if len(matched) > 0:
+            if len(matched) < len(target_contracts):
+                _LAST_CQG_FAIL_TS = time.time()
+            return matched
 
+        _LAST_CQG_FAIL_TS = time.time()
         return None
     except Exception as e:
         logger.warning(f"Error fetching quotes from CQG Desktop: {e}")
+        _LAST_CQG_FAIL_TS = time.time()
         return None
-    finally:
-        try:
-            driver.quit()
-        except Exception:
-            pass
 
 
 def _extract_qss_quotes(

@@ -191,12 +191,17 @@ def get_prev_day_range(contract: str = "KCH27", target_date: str | None = None) 
 
 
 
+_LAST_BACKFILL_TS: dict[str, float] = {}
+
+
 def backfill_intraday_session_history(csv_path: Path | None = None) -> pd.DataFrame:
     """Ensure today's intraday price history is populated from Yahoo Finance if sparse.
 
-    Queries Yahoo Finance 5-minute bars for KCZ26, KCH27, and KCK27 from 04:15 ET to now
+    Queries Yahoo Finance 5-minute bars for KCZ26, KCH27, and KCK27 concurrently from 04:15 ET to now
     so that fresh runs or cloud containers immediately have a full, unbroken session chart.
     """
+    import time
+    from concurrent.futures import ThreadPoolExecutor
     path = csv_path or get_default_intraday_csv()
     now_ny = datetime.now(NY_TZ)
     today_str = now_ny.strftime("%Y-%m-%d")
@@ -208,31 +213,42 @@ def backfill_intraday_session_history(csv_path: Path | None = None) -> pd.DataFr
             today_pts = existing_df[existing_df["datetime_ny"].str.startswith(today_str)]
             if len(today_pts) >= 10:
                 return existing_df
+            # Throttle repeated Yahoo backfill probes to once per 10 minutes per file
+            last_try = _LAST_BACKFILL_TS.get(str(path), 0.0)
+            if len(existing_df) > 0 and (time.time() - last_try) < 600.0:
+                return existing_df
         except Exception:
             existing_df = None
 
+    _LAST_BACKFILL_TS[str(path)] = time.time()
     import requests
 
     contracts = ["KCZ26", "KCH27", "KCK27"]
     quotes_by_contract: dict[str, dict[int, float]] = {}
 
-    for sym in contracts:
+    def _fetch_sym_5m(sym: str) -> tuple[str, dict[int, float]]:
         ticker = f"{sym}.NYB"
         url = f"https://query1.finance.yahoo.com/v8/finance/chart/{ticker}?interval=5m&range=1d"
         headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"}
         try:
-            r = requests.get(url, headers=headers, timeout=6.0)
+            r = requests.get(url, headers=headers, timeout=4.0)
             if r.status_code == 200:
                 payload = r.json()
                 results = payload.get("chart", {}).get("result", [])
                 if results:
                     timestamps = results[0].get("timestamp", [])
                     closes = results[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
-                    quotes_by_contract[sym] = {
+                    return sym, {
                         ts: float(c) for ts, c in zip(timestamps, closes) if c is not None
                     }
         except Exception as e:
             logger.warning(f"Error fetching intraday bars for {sym}: {e}")
+        return sym, {}
+
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        for sym, sym_quotes in pool.map(_fetch_sym_5m, contracts):
+            if sym_quotes:
+                quotes_by_contract[sym] = sym_quotes
 
     if not quotes_by_contract.get("KCZ26"):
         return existing_df if existing_df is not None else pd.DataFrame()
@@ -380,7 +396,7 @@ def generate_intraday_5m_chart(
         fig, (ax1, ax2) = plt.subplots(
             2, 1,
             figsize=(11, 7.5),
-            dpi=160,
+            dpi=130,
             sharex=True,
             gridspec_kw={"height_ratios": [1.4, 1.0], "hspace": 0.08}
         )
@@ -608,7 +624,7 @@ def generate_intraday_5m_chart(
 
         fig.subplots_adjust(top=0.92, bottom=0.08, left=0.08, right=0.90, hspace=0.12)
         out_img.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(out_img, facecolor=fig.get_facecolor(), edgecolor="none", dpi=160, bbox_inches="tight")
+        fig.savefig(out_img, facecolor=fig.get_facecolor(), edgecolor="none", dpi=130, bbox_inches="tight")
         plt.close(fig)
 
         logger.info(f"Generated {interval_minutes}-minute smooth price line chart at {out_img}")

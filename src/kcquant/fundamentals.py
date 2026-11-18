@@ -466,11 +466,27 @@ def parse_cert_stock(path) -> tuple[dict, pd.DataFrame]:
     return summary, pd.DataFrame(long)
 
 
+_CERT_STOCKS_CACHE: dict[tuple, object] = {}
+
+
 def load_cert_stocks(cache_dir: Path, with_detail: bool = False):
     """All downloaded daily reports -> DataFrame indexed by report date with available_at."""
     d = cache_dir / "ice_cert_stock"
+    xls_files = sorted(d.glob("coffee_cert_stock_*.xls"))
+    if not xls_files:
+        raise FileNotFoundError(f"no certified stock reports in {d}")
+
+    latest_mtime = max(f.stat().st_mtime for f in xls_files)
+    cache_key = (str(d.resolve()), len(xls_files), latest_mtime, with_detail)
+    if cache_key in _CERT_STOCKS_CACHE:
+        cached = _CERT_STOCKS_CACHE[cache_key]
+        if with_detail:
+            df_c, det_c = cached  # type: ignore[misc]
+            return df_c.copy(), det_c.copy()
+        return cached.copy()  # type: ignore[union-attr]
+
     rows, details = [], []
-    for f in sorted(d.glob("coffee_cert_stock_*.xls")):
+    for f in xls_files:
         day = pd.Timestamp(f.stem.split("_")[-1])
         try:
             s, long = parse_cert_stock(f)
@@ -491,5 +507,8 @@ def load_cert_stocks(cache_dir: Path, with_detail: bool = False):
         .tz_localize(NY).tz_convert("UTC")
     out = out.drop(columns="asof_local")
     if with_detail:
-        return out, (pd.concat(details, ignore_index=True) if details else pd.DataFrame())
-    return out
+        det_df = pd.concat(details, ignore_index=True) if details else pd.DataFrame()
+        _CERT_STOCKS_CACHE[cache_key] = (out, det_df)
+        return out.copy(), det_df.copy()
+    _CERT_STOCKS_CACHE[cache_key] = out
+    return out.copy()

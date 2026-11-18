@@ -137,10 +137,15 @@ def fetch_live_curve_quotes() -> dict | None:
     except Exception:
         pass
 
-    # 2. Individual live fetch fallback
-    z_q = fetch_live_contract_quote("KCZ26")
-    h_q = fetch_live_contract_quote("KCH27")
-    k_q = fetch_live_contract_quote("KCK27")
+    # 2. Concurrent live fetch fallback
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        f_z = pool.submit(fetch_live_contract_quote, "KCZ26")
+        f_h = pool.submit(fetch_live_contract_quote, "KCH27")
+        f_k = pool.submit(fetch_live_contract_quote, "KCK27")
+        z_q = f_z.result()
+        h_q = f_h.result()
+        k_q = f_k.result()
 
     if z_q is None or h_q is None or k_q is None:
         return None

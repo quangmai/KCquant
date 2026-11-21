@@ -1,11 +1,11 @@
 {
   "kcz26": 282.0,
-  "kch27": 271.2,
-  "kck27": 263.7,
-  "spread_zh": 10.8,
-  "spread_hk": 7.5,
-  "price_source": "Live Market (CQG Desktop \u00b7 05:54 ET)",
-  "quote_time_ny": "2026-11-20 05:54 ET",
+  "kch27": 273.9,
+  "kck27": 268.7,
+  "spread_zh": 8.1,
+  "spread_hk": 5.2,
+  "price_source": "Live Market (CQG Desktop \u00b7 22:17 ET)",
+  "quote_time_ny": "2026-11-20 22:17 ET",
   "live_meta": {
     "kcz26": {
       "contract": "KCZ26",
@@ -15,59 +15,38 @@
       "high": 282.0,
       "low": 282.0,
       "volume": 0,
-      "datetime_ny": "2026-11-20 05:54 ET",
-      "time_str": "05:54 ET",
-      "source": "Live Market (CQG Desktop \u00b7 05:54 ET)"
+      "datetime_ny": "2026-11-20 22:17 ET",
+      "time_str": "22:17 ET",
+      "source": "Live Market (CQG Desktop \u00b7 22:17 ET)"
     },
     "kch27": {
       "contract": "KCH27",
       "cqg_symbol": "KCEH27",
-      "price": 271.2,
-      "bid": 271.2,
-      "ask": 271.3,
-      "change": -4.3,
-      "prev_close": 275.5,
-      "high": 271.3,
-      "low": 271.2,
+      "price": 273.9,
+      "prev_close": 275.9,
+      "high": 275.9,
+      "low": 268.0,
       "volume": 0,
-      "datetime_ny": "2026-11-20 05:54 ET",
-      "time_str": "05:54 ET",
-      "source": "Live Market (CQG Desktop \u00b7 05:54 ET)"
+      "datetime_ny": "2026-11-20 22:17 ET",
+      "time_str": "22:17 ET",
+      "source": "Live Market (CQG Desktop \u00b7 22:17 ET)"
     },
     "kck27": {
       "contract": "KCK27",
       "cqg_symbol": "KCEK27",
-      "price": 263.7,
-      "bid": 263.9,
-      "ask": 264.0,
-      "change": -4.05,
-      "prev_close": 267.75,
-      "high": 264.0,
-      "low": 263.7,
+      "price": 268.7,
+      "prev_close": 262.6,
+      "high": 275.9,
+      "low": 257.5,
       "volume": 0,
-      "datetime_ny": "2026-11-20 05:54 ET",
-      "time_str": "05:54 ET",
-      "source": "Live Market (CQG Desktop \u00b7 05:54 ET)"
+      "datetime_ny": "2026-11-20 22:17 ET",
+      "time_str": "22:17 ET",
+      "source": "Live Market (CQG Desktop \u00b7 22:17 ET)"
     },
-    "spread_zh": 10.8,
-    "spread_hk": 7.5,
-    "quote_time_ny": "2026-11-20 05:54 ET",
-    "source": "Live Market (CQG Desktop \u00b7 05:54 ET)",
-    "kcn27": {
-      "contract": "KCN27",
-      "cqg_symbol": "KCEN27",
-      "price": 257.95,
-      "bid": 257.95,
-      "ask": 258.15,
-      "change": -3.5,
-      "prev_close": 261.45,
-      "high": 258.15,
-      "low": 257.95,
-      "volume": 0,
-      "datetime_ny": "2026-11-20 05:54 ET",
-      "time_str": "05:54 ET",
-      "source": "Live Market (CQG Desktop \u00b7 05:54 ET)"
-    }
+    "spread_zh": 8.1,
+    "spread_hk": 5.2,
+    "quote_time_ny": "2026-11-20 22:17 ET",
+    "source": "Live Market (CQG Desktop \u00b7 22:17 ET)"
   },
   "cqg_ok": true
 }

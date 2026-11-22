@@ -4,8 +4,8 @@
   "kck27": 268.7,
   "spread_zh": 8.1,
   "spread_hk": 5.2,
-  "price_source": "Live Market (CQG Desktop \u00b7 22:17 ET)",
-  "quote_time_ny": "2026-11-20 22:17 ET",
+  "price_source": "Live Market (CQG Desktop \u00b7 00:42 ET)",
+  "quote_time_ny": "2026-11-22 00:42 ET",
   "live_meta": {
     "kcz26": {
       "contract": "KCZ26",
@@ -15,9 +15,9 @@
       "high": 282.0,
       "low": 282.0,
       "volume": 0,
-      "datetime_ny": "2026-11-20 22:17 ET",
-      "time_str": "22:17 ET",
-      "source": "Live Market (CQG Desktop \u00b7 22:17 ET)"
+      "datetime_ny": "2026-11-22 00:42 ET",
+      "time_str": "00:42 ET",
+      "source": "Live Market (CQG Desktop \u00b7 00:42 ET)"
     },
     "kch27": {
       "contract": "KCH27",
@@ -27,9 +27,9 @@
       "high": 275.9,
       "low": 268.0,
       "volume": 0,
-      "datetime_ny": "2026-11-20 22:17 ET",
-      "time_str": "22:17 ET",
-      "source": "Live Market (CQG Desktop \u00b7 22:17 ET)"
+      "datetime_ny": "2026-11-22 00:42 ET",
+      "time_str": "00:42 ET",
+      "source": "Live Market (CQG Desktop \u00b7 00:42 ET)"
     },
     "kck27": {
       "contract": "KCK27",
@@ -39,14 +39,14 @@
       "high": 275.9,
       "low": 257.5,
       "volume": 0,
-      "datetime_ny": "2026-11-20 22:17 ET",
-      "time_str": "22:17 ET",
-      "source": "Live Market (CQG Desktop \u00b7 22:17 ET)"
+      "datetime_ny": "2026-11-22 00:42 ET",
+      "time_str": "00:42 ET",
+      "source": "Live Market (CQG Desktop \u00b7 00:42 ET)"
     },
     "spread_zh": 8.1,
     "spread_hk": 5.2,
-    "quote_time_ny": "2026-11-20 22:17 ET",
-    "source": "Live Market (CQG Desktop \u00b7 22:17 ET)"
+    "quote_time_ny": "2026-11-22 00:42 ET",
+    "source": "Live Market (CQG Desktop \u00b7 00:42 ET)"
   },
   "cqg_ok": true
 }
